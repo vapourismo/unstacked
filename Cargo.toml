@@ -1,0 +1,11 @@
+[package]
+name = "unstacked"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+git2 = "*"
+gpgme = "*"
+
+[dependencies.clap]
+features = ["derive"]
