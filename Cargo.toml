@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-git2 = "*"
-gpgme = "*"
+git2 = "0.18.1"
+gpgme = "0.11.0"
 
 [dependencies.clap]
+version = "4.4.10"
 features = ["derive"]
