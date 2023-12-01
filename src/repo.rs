@@ -1,3 +1,5 @@
+use git2::Oid;
+
 use crate::commit::Commit;
 use std::{error::Error, path::Path};
 
@@ -67,5 +69,10 @@ impl Repo {
         )?;
         let new_commit = self.0.find_commit(new_commit_oid)?;
         Ok(Commit(new_commit))
+    }
+
+    pub fn update_reference(&self, name: impl AsRef<str>, oid: Oid) -> Result<(), git2::Error> {
+        self.0.reference(name.as_ref(), oid, true, "Unstacked")?;
+        Ok(())
     }
 }

@@ -23,6 +23,10 @@ struct Args {
     /// Sign the resulting commit?
     #[arg(short, long)]
     sign: bool,
+
+    /// Update this reference
+    #[arg(short, long)]
+    update_ref: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -34,6 +38,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     for new_ref in &args.added_refs {
         let new_commit = repo.find_commit(new_ref)?;
         commit = commit.cherry_pick(&repo, &new_commit, args.sign)?;
+    }
+
+    if let Some(ref_) = args.update_ref {
+        repo.update_reference(&ref_, commit.id())?;
     }
 
     println!("{}", commit.id());
