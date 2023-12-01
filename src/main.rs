@@ -8,14 +8,21 @@ use std::error::Error;
 #[derive(Parser, Debug)]
 #[command()]
 struct Args {
+    /// Repository location
     #[arg(long, default_value = ".")]
     repo: String,
 
-    #[arg(short = 'b', long = "base")]
+    /// Base commit
+    #[arg(short, long = "base")]
     base_ref: String,
 
+    /// Commits to be added on top of the base
     #[arg(short = 'r', long = "ref")]
     added_refs: Vec<String>,
+
+    /// Sign the resulting commit?
+    #[arg(short, long)]
+    sign: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
