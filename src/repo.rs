@@ -72,9 +72,13 @@ impl Repo {
         Ok(Commit(new_commit))
     }
 
-    pub fn update_reference(&self, name: impl AsRef<str>, oid: Oid) -> Result<(), git2::Error> {
-        self.0.reference(name.as_ref(), oid, true, "Unstacked")?;
-        Ok(())
+    pub fn update_reference(
+        &self,
+        name: impl AsRef<str>,
+        oid: Oid,
+    ) -> Result<git2::Reference, git2::Error> {
+        let ref_ = self.0.reference(name.as_ref(), oid, true, "Unstacked")?;
+        Ok(ref_)
     }
 
     pub fn push(&self, remote: impl AsRef<str>, refspecs: &[&str]) -> Result<(), git2::Error> {
