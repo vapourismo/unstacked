@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         repo.update_reference(&ref_, commit.id())?;
 
         if let Some(remote_name) = args.push {
-            repo.push(remote_name, &[format!("{ref_}:refs/{ref_}").as_str()])?;
+            repo.push(remote_name, &[format!("+{ref_}:refs/{ref_}").as_str()])?;
         }
     }
 
