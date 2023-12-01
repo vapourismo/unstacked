@@ -27,6 +27,10 @@ struct Args {
     /// Update this reference
     #[arg(short, long)]
     update_ref: Option<String>,
+
+    /// Push updated reference to this remote
+    #[arg(short, long)]
+    push: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -42,6 +46,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(ref_) = args.update_ref {
         repo.update_reference(&ref_, commit.id())?;
+
+        if let Some(remote_name) = args.push {
+            repo.push(remote_name, &[format!("{ref_}:refs/{ref_}").as_str()])?;
+        }
     }
 
     println!("{}", commit.id());

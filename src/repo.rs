@@ -1,3 +1,4 @@
+use auth_git2::GitAuthenticator;
 use git2::Oid;
 
 use crate::commit::Commit;
@@ -73,6 +74,25 @@ impl Repo {
 
     pub fn update_reference(&self, name: impl AsRef<str>, oid: Oid) -> Result<(), git2::Error> {
         self.0.reference(name.as_ref(), oid, true, "Unstacked")?;
+        Ok(())
+    }
+
+    pub fn push(&self, remote: impl AsRef<str>, refspecs: &[&str]) -> Result<(), git2::Error> {
+        let mut remote = self.0.find_remote(remote.as_ref())?;
+
+        let auth = GitAuthenticator::default();
+        let config = git2::Config::open_default()?;
+
+        let mut remote_cbs = git2::RemoteCallbacks::new();
+        remote_cbs.credentials(auth.credentials(&config));
+
+        let mut conn = remote.connect_auth(git2::Direction::Push, Some(remote_cbs), None)?;
+
+        conn.remote().push(
+            refspecs.as_ref(),
+            None, // Some(PushOptions::new().remote_callbacks(remote_cbs)),
+        )?;
+
         Ok(())
     }
 }
