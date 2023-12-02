@@ -2,7 +2,7 @@ mod commit;
 mod repo;
 
 use crate::repo::Repo;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::error::Error;
 
 #[derive(Parser, Debug)]
@@ -12,44 +12,56 @@ struct Args {
     #[arg(long, default_value = ".")]
     repo: String,
 
-    /// Base commit
-    #[arg(short, long = "base")]
-    base_ref: String,
-
-    /// Use merge-base instead of base
-    #[arg(short = 'm', long)]
-    use_merge_base: bool,
-
-    /// Commits to be added on top of the base
-    #[arg(short = 'r', long = "ref")]
-    added_refs: Vec<String>,
-
-    /// Sign the resulting commit?
-    #[arg(short, long)]
-    sign: bool,
-
-    /// Update this reference
-    #[arg(short, long)]
-    update_ref: Option<String>,
-
-    /// Push updated reference to this remote
-    #[arg(short, long)]
-    push: Option<String>,
+    #[command(subcommand)]
+    command: Cmd,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
+#[derive(Subcommand, Debug)]
+enum Cmd {
+    /// Construct a chain of commits from the given base
+    Chain {
+        /// Base commit
+        #[arg(short, long = "base")]
+        base_ref: String,
 
-    let repo = Repo::discover(args.repo.as_str())?;
+        /// Use merge-base instead of base
+        #[arg(short = 'm', long)]
+        use_merge_base: bool,
 
-    let mut commit = repo.find_commit(args.base_ref)?;
-    let add_commits = args
-        .added_refs
+        /// Commits to be added on top of the base
+        #[arg()]
+        added_refs: Vec<String>,
+
+        /// Sign the resulting commit
+        #[arg(short, long)]
+        sign: bool,
+
+        /// Update this reference
+        #[arg(short, long)]
+        update_ref: Option<String>,
+
+        /// Push updated reference to this remote
+        #[arg(short, long)]
+        push: Option<String>,
+    },
+}
+
+fn chain(
+    repo: &Repo,
+    base_ref: String,
+    use_merge_base: bool,
+    added_refs: Vec<String>,
+    sign: bool,
+    update_ref: Option<String>,
+    push: Option<String>,
+) -> Result<(), Box<dyn Error>> {
+    let mut commit = repo.find_commit(base_ref)?;
+    let add_commits = added_refs
         .into_iter()
         .map(|ref_| repo.find_commit(ref_))
         .collect::<Result<Vec<_>, _>>()?;
 
-    if args.use_merge_base {
+    if use_merge_base {
         let mut all_commits = Vec::with_capacity(add_commits.len() + 1);
         all_commits.push(commit.clone());
         all_commits.splice(1.., add_commits.iter().cloned());
@@ -57,18 +69,44 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     for new_commit in add_commits {
-        commit = commit.cherry_pick(&repo, &new_commit, args.sign)?;
+        commit = commit.cherry_pick(&repo, &new_commit, sign)?;
     }
 
-    if let Some(ref_) = args.update_ref {
+    if let Some(ref_) = update_ref {
         repo.update_reference(&ref_, commit.id())?;
 
-        if let Some(remote_name) = args.push {
+        if let Some(remote_name) = push {
             repo.push(remote_name, &[format!("+{ref_}").as_str()])?;
         }
     }
 
     println!("{}", commit.id());
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    let repo = Repo::discover(args.repo.as_str())?;
+
+    match args.command {
+        Cmd::Chain {
+            base_ref,
+            use_merge_base,
+            added_refs,
+            sign,
+            update_ref,
+            push,
+        } => chain(
+            &repo,
+            base_ref,
+            use_merge_base,
+            added_refs,
+            sign,
+            update_ref,
+            push,
+        )?,
+    }
 
     Ok(())
 }

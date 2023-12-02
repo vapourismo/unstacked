@@ -100,10 +100,11 @@ impl Repo {
         Ok(())
     }
 
-    pub fn merge_base<'a, C: AsRef<Commit<'a>>>(
-        &'a self,
-        commits: &[C],
-    ) -> Result<Commit, git2::Error> {
+    pub fn merge_base<'a, 'b, CS>(&'a self, commits: CS) -> Result<Commit, git2::Error>
+    where
+        CS: IntoIterator<Item = &'b Commit<'a>>,
+        'a: 'b,
+    {
         let oids = commits
             .into_iter()
             .map(|c| c.as_ref().id())
