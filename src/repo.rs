@@ -99,4 +99,17 @@ impl Repo {
 
         Ok(())
     }
+
+    pub fn merge_base<'a, C: AsRef<Commit<'a>>>(
+        &'a self,
+        commits: &[C],
+    ) -> Result<Commit, git2::Error> {
+        let oids = commits
+            .into_iter()
+            .map(|c| c.as_ref().id())
+            .collect::<Vec<Oid>>();
+        let merge_base = self.0.merge_base_many(&oids)?;
+        let commit = self.0.find_commit(merge_base)?;
+        Ok(Commit(commit))
+    }
 }

@@ -16,6 +16,10 @@ struct Args {
     #[arg(short, long = "base")]
     base_ref: String,
 
+    /// Use merge-base instead of base
+    #[arg(short = 'm', long)]
+    use_merge_base: bool,
+
     /// Commits to be added on top of the base
     #[arg(short = 'r', long = "ref")]
     added_refs: Vec<String>,
@@ -37,10 +41,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     let repo = Repo::discover(args.repo.as_str())?;
-    let mut commit = repo.find_commit(args.base_ref)?;
 
-    for new_ref in &args.added_refs {
-        let new_commit = repo.find_commit(new_ref)?;
+    let mut commit = repo.find_commit(args.base_ref)?;
+    let add_commits = args
+        .added_refs
+        .into_iter()
+        .map(|ref_| repo.find_commit(ref_))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if args.use_merge_base {
+        let mut all_commits = Vec::with_capacity(add_commits.len() + 1);
+        all_commits.push(commit.clone());
+        all_commits.splice(1.., add_commits.iter().cloned());
+        commit = repo.merge_base(&all_commits)?;
+    }
+
+    for new_commit in add_commits {
         commit = commit.cherry_pick(&repo, &new_commit, args.sign)?;
     }
 
@@ -48,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         repo.update_reference(&ref_, commit.id())?;
 
         if let Some(remote_name) = args.push {
-            repo.push(remote_name, &[format!("+{ref_}:refs/{ref_}").as_str()])?;
+            repo.push(remote_name, &[format!("+{ref_}").as_str()])?;
         }
     }
 
