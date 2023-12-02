@@ -13,10 +13,12 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       frameworks = pkgs.darwin.apple_sdk.frameworks;
+
+      cargoManifest = builtins.fromTOML (builtins.readFile (self + /Cargo.toml));
     in {
       packages.default = pkgs.rustPlatform.buildRustPackage {
         pname = "unstacked";
-        version = "0.0.0";
+        version = cargoManifest.package.version;
 
         src = pkgs.nix-gitignore.gitignoreSource [] self;
 
