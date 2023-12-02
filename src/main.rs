@@ -139,17 +139,31 @@ fn plan(
 }
 
 fn realise(state: State, plans: Vec<String>) -> Result<(), Box<dyn Error>> {
-    for plan in plans {
-        let plan = state.find_plan(plan)?;
-        chain(
-            state.repo(),
-            plan.base_ref,
-            plan.use_merge_base,
-            plan.added_refs,
-            plan.sign,
-            None,
-            None,
-        )?;
+    if plans.is_empty() {
+        for plan in state.all_plans()? {
+            chain(
+                state.repo(),
+                plan.base_ref,
+                plan.use_merge_base,
+                plan.added_refs,
+                plan.sign,
+                None,
+                None,
+            )?;
+        }
+    } else {
+        for plan in plans {
+            let plan = state.find_plan(plan)?;
+            chain(
+                state.repo(),
+                plan.base_ref,
+                plan.use_merge_base,
+                plan.added_refs,
+                plan.sign,
+                None,
+                None,
+            )?;
+        }
     }
 
     Ok(())
