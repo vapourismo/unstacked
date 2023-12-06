@@ -1,7 +1,6 @@
+use crate::commit::Commit;
 use auth_git2::GitAuthenticator;
 use git2::Oid;
-
-use crate::commit::Commit;
 use std::{error::Error, path::Path};
 
 #[derive(
@@ -85,6 +84,23 @@ impl Repo {
         )?;
         let new_commit = self.0.find_commit(new_commit_oid)?;
         Ok(Commit(new_commit))
+    }
+
+    pub fn merge<'a>(
+        &'a self,
+        first: &Commit<'a>,
+        second: &Commit<'a>,
+    ) -> Result<Commit<'a>, Box<dyn Error>> {
+        let mut index = self
+            .0
+            .merge_commits(first.as_ref(), second.as_ref(), None)?;
+        let tree = index.write_tree_to(&self.0)?;
+        let tree = self.find_tree(tree)?;
+
+        let sig = self.signature()?;
+        let commit = self.commit(&sig, &sig, "Test merge", &tree, [first, second])?;
+
+        Ok(commit)
     }
 
     pub fn update_reference(
