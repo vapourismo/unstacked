@@ -4,7 +4,7 @@ mod state;
 
 use clap::{Parser, Subcommand};
 use repo::Repo;
-use state::{Plan, State};
+use state::State;
 use std::error::Error;
 
 #[derive(Parser, Debug)]
@@ -47,35 +47,6 @@ enum Cmd {
         push: Option<String>,
     },
 
-    /// Create a plan to create a ref.
-    Plan {
-        /// Plan name
-        #[arg(short, long)]
-        name: String,
-
-        /// Base commit
-        #[arg(short, long = "base")]
-        base_ref: String,
-
-        /// Use merge-base instead of base
-        #[arg(short = 'm', long)]
-        use_merge_base: bool,
-
-        /// Commits to be added on top of the base
-        #[arg()]
-        added_refs: Vec<String>,
-
-        /// Sign the resulting commit
-        #[arg(short, long)]
-        sign: bool,
-    },
-
-    /// Realise a plan
-    Realise {
-        /// Plans to realise
-        #[arg()]
-        names: Vec<String>,
-    },
 }
 
 fn chain(
@@ -118,57 +89,6 @@ fn chain(
     Ok(())
 }
 
-fn plan(
-    state: State,
-    name: String,
-    base_ref: String,
-    use_merge_base: bool,
-    added_refs: Vec<String>,
-    sign: bool,
-) -> Result<(), Box<dyn Error>> {
-    let plan = Plan {
-        base_ref,
-        use_merge_base,
-        added_refs,
-        sign,
-    };
-
-    state.save_plan(name, &plan)?;
-
-    Ok(())
-}
-
-fn realise(state: State, plans: Vec<String>) -> Result<(), Box<dyn Error>> {
-    if plans.is_empty() {
-        for plan in state.all_plans()? {
-            chain(
-                state.repo(),
-                plan.base_ref,
-                plan.use_merge_base,
-                plan.added_refs,
-                plan.sign,
-                None,
-                None,
-            )?;
-        }
-    } else {
-        for plan in plans {
-            let plan = state.find_plan(plan)?;
-            chain(
-                state.repo(),
-                plan.base_ref,
-                plan.use_merge_base,
-                plan.added_refs,
-                plan.sign,
-                None,
-                None,
-            )?;
-        }
-    }
-
-    Ok(())
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let repo = Repo::discover(args.repo.as_str())?;
@@ -192,15 +112,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             push,
         )?,
 
-        Cmd::Plan {
-            name,
-            base_ref,
-            use_merge_base,
-            added_refs,
-            sign,
-        } => plan(state, name, base_ref, use_merge_base, added_refs, sign)?,
-
-        Cmd::Realise { names: plans } => realise(state, plans)?,
     }
 
     Ok(())
