@@ -1,5 +1,5 @@
 use crate::repo::Repo;
-use git2::Oid;
+use git2::{Oid, ResetType};
 use serde::{Deserialize, Serialize};
 
 pub struct Manager {
@@ -53,8 +53,7 @@ impl Serialize for PlainOid {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct State {
     next: Box<Unrealised>,
-    head: PlainOid,
-    prev: Box<Realised>,
+    head: Box<Realised>,
 }
 
 impl State {
@@ -67,9 +66,8 @@ impl State {
 
             Err(git_error) if git_error.code() == git2::ErrorCode::NotFound => {
                 let next = Box::new(Unrealised::Stop);
-                let head = PlainOid(mgr.repo.head()?.peel_to_commit()?.id());
-                let prev = Box::new(Realised::Stop);
-                Ok(State { next, head, prev })
+                let head = Box::new(Realised::Stop);
+                Ok(State { next, head })
             }
 
             Err(err) => Err(err.into()),
@@ -84,40 +82,61 @@ impl State {
     }
 
     pub fn validate(self, mgr: &Manager) -> Result<Self, Error> {
-        let head = mgr.repo().head()?.peel_to_commit()?;
+        match self.head.as_ref() {
+            Realised::Commit { commit, .. } => {
+                let head = mgr.repo.head()?.peel_to_commit()?;
 
-        if self.head.0 != head.id() {
-            // Unexpected HEAD
-            return Err(Error::UnexpectedHEAD);
+                if head.id() != commit.0 {
+                    return Err(Error::UnexpectedHEAD);
+                }
+
+                Ok(self)
+            }
+            Realised::Stop => Ok(self),
+        }
+    }
+
+    pub fn prev(&mut self, mgr: &Manager) -> Result<(), Error> {
+        match self.head.as_ref() {
+            Realised::Commit { commit, prev } => todo!(),
+            Realised::Stop => {
+                let head = mgr.repo.head()?.peel_to_commit()?;
+                let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
+                let parent_id = parent.id();
+
+                self.next = Box::new(Unrealised::Commit {
+                    next: self.next.clone(),
+                    commit: PlainOid(head.id()),
+                });
+
+                self.head = Box::new(Realised::Commit {
+                    commit: PlainOid(parent_id),
+                    prev: Box::new(Realised::Stop),
+                });
+
+                mgr.repo
+                    .0
+                    .reset(parent.as_object(), ResetType::Soft, None)?;
+                self.write(mgr)?;
+            }
         }
 
-        Ok(self)
+        Ok(())
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Unrealised {
     Commit {
         next: Box<Unrealised>,
-        name: Option<String>,
-        commit: PlainOid,
-    },
-    Bookmark {
-        next: Box<Unrealised>,
-        name: String,
         commit: PlainOid,
     },
     Stop,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Realised {
     Commit {
-        commit: PlainOid,
-        prev: Box<Realised>,
-    },
-    Bookmark {
-        name: String,
         commit: PlainOid,
         prev: Box<Realised>,
     },
