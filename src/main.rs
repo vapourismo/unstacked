@@ -7,6 +7,8 @@ use repo::Repo;
 use state::Manager;
 use std::error::Error;
 
+use crate::state::State;
+
 #[derive(Parser, Debug)]
 #[command()]
 struct Args {
@@ -94,7 +96,7 @@ fn chain(
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let repo = Repo::discover(args.repo.as_str())?;
-    let state = Manager::new(repo);
+    let mgr = Manager::new(repo);
 
     match args.command {
         Cmd::Chain {
@@ -105,7 +107,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             update_ref,
             push,
         } => chain(
-            state.repo(),
+            mgr.repo(),
             base_ref,
             use_merge_base,
             added_refs,
@@ -115,9 +117,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         )?,
 
         Cmd::Test {} => {
-            let state_rep = state.read_state()?;
-            state.write_state(&state_rep)?;
-            eprintln!("{state_rep:?}");
+            let state = State::read(&mgr)?;
+            let state = state.validate(&mgr)?;
+            state.write(&mgr)?;
+            eprintln!("{state:?}");
         }
     }
 
