@@ -50,6 +50,9 @@ enum Cmd {
     },
 
     ///
+    Next {},
+
+    ///
     Prev {},
 
     ///
@@ -118,6 +121,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             update_ref,
             push,
         )?,
+
+        Cmd::Next {} => {
+            let mut state = State::read(&mgr)?.validate(&mgr)?;
+            state.next(&mgr)?;
+        }
 
         Cmd::Prev {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;

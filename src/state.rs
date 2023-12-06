@@ -127,6 +127,37 @@ impl State {
 
         Ok(())
     }
+
+    pub fn next(&mut self, mgr: &Manager) -> Result<(), Error> {
+        match self.next.as_ref() {
+            Unrealised::Commit { next, commit } => {
+                let cherry = mgr.repo.0.find_commit(commit.0)?.into();
+
+                let head: Commit = match self.head.as_ref() {
+                    Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?.into(),
+                    Realised::Stop => mgr.repo.head()?.peel_to_commit()?.into(),
+                };
+
+                let new_head = head.cherry_pick(mgr.repo(), &cherry, false)?;
+
+                self.next = next.clone();
+
+                self.head = Box::new(Realised::Commit {
+                    commit: PlainOid(new_head.id()),
+                    prev: self.head.clone(),
+                });
+
+                mgr.repo
+                    .0
+                    .reset(new_head.as_object(), ResetType::Soft, None)?;
+                self.write(mgr)?;
+            }
+
+            Unrealised::Stop => {}
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
