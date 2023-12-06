@@ -4,7 +4,7 @@ mod state;
 
 use clap::{Parser, Subcommand};
 use repo::Repo;
-use state::State;
+use state::Manager;
 use std::error::Error;
 
 #[derive(Parser, Debug)]
@@ -47,6 +47,8 @@ enum Cmd {
         push: Option<String>,
     },
 
+    ///
+    Test {},
 }
 
 fn chain(
@@ -92,7 +94,7 @@ fn chain(
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let repo = Repo::discover(args.repo.as_str())?;
-    let state = State::new(repo);
+    let state = Manager::new(repo);
 
     match args.command {
         Cmd::Chain {
@@ -112,6 +114,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             push,
         )?,
 
+        Cmd::Test {} => {
+            let state_rep = state.read_state()?;
+            state.write_state(&state_rep)?;
+            eprintln!("{state_rep:?}");
+        }
     }
 
     Ok(())

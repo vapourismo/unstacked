@@ -2,7 +2,7 @@ use crate::repo::Repo;
 use git2::Oid;
 use serde::{Deserialize, Serialize};
 
-pub struct State {
+pub struct Manager {
     repo: Repo,
 }
 
@@ -14,7 +14,7 @@ pub enum Error {
 
 const STATE_REF: &str = "refs/unstacked/state";
 
-impl State {
+impl Manager {
     pub fn new(repo: Repo) -> Self {
         Self { repo }
     }
@@ -23,7 +23,7 @@ impl State {
         &self.repo
     }
 
-    pub fn read_state(&self) -> Result<StateRep, Error> {
+    pub fn read_state(&self) -> Result<State, Error> {
         match self.repo.find_reference(STATE_REF) {
             Ok(ref_) => {
                 let oid = ref_.peel_to_blob()?;
@@ -34,14 +34,14 @@ impl State {
                 let next = Box::new(Unrealised::Stop);
                 let head = PlainOid(self.repo.head()?.peel_to_commit()?.id());
                 let prev = Box::new(Realised::Stop);
-                Ok(StateRep { next, head, prev })
+                Ok(State { next, head, prev })
             }
 
             Err(err) => Err(err.into()),
         }
     }
 
-    pub fn write_state(&self, state: &StateRep) -> Result<(), Error> {
+    pub fn write_state(&self, state: &State) -> Result<(), Error> {
         let contents = serde_json::ser::to_vec_pretty(state)?;
         let oid = self.repo.blob(contents.as_slice())?;
         self.repo.update_reference(STATE_REF, oid)?;
@@ -75,7 +75,7 @@ impl Serialize for PlainOid {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct StateRep {
+pub struct State {
     next: Box<Unrealised>,
     head: PlainOid,
     prev: Box<Realised>,
