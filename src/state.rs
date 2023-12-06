@@ -131,14 +131,23 @@ impl State {
     pub fn next(&mut self, mgr: &Manager) -> Result<(), Error> {
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
-                let cherry = mgr.repo.0.find_commit(commit.0)?.into();
+                let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();
 
                 let head: Commit = match self.head.as_ref() {
                     Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?.into(),
                     Realised::Stop => mgr.repo.head()?.peel_to_commit()?.into(),
                 };
 
-                let new_head = head.cherry_pick(mgr.repo(), &cherry, false)?;
+                let new_head = if cherry.parent_count() == 1
+                    && cherry
+                        .parent(0)
+                        .map(|cherry_parent| cherry_parent.id() == head.id())
+                        .unwrap_or(false)
+                {
+                    cherry
+                } else {
+                    head.cherry_pick(mgr.repo(), &cherry, false)?
+                };
 
                 self.next = next.clone();
 
