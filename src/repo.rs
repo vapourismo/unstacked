@@ -1,7 +1,15 @@
 use crate::commit::Commit;
 use auth_git2::GitAuthenticator;
 use git2::Oid;
-use std::{error::Error, path::Path};
+use std::{path::Path, str::Utf8Error};
+
+#[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
+pub enum Error {
+    Git(git2::Error),
+    Gpg(gpgme::Error),
+    Utf8(Utf8Error),
+    EmptyCommitMessage,
+}
 
 #[derive(
     derive_more::From, derive_more::Into, derive_more::AsRef, derive_more::AsMut, derive_more::Deref,
@@ -32,7 +40,7 @@ impl Repo {
         message: impl AsRef<str>,
         tree: &git2::Tree,
         parents: impl IntoIterator<Item = &'b Commit<'a>>,
-    ) -> Result<Commit<'a>, Box<dyn Error>>
+    ) -> Result<Commit<'a>, Error>
     where
         'a: 'b,
     {
@@ -46,7 +54,7 @@ impl Repo {
         )?;
         let commit_buffer_str = commit_buffer
             .as_str()
-            .ok_or_else(|| -> Box<dyn Error> { "Empty commit buffer string".into() })?;
+            .ok_or_else(|| Error::EmptyCommitMessage)?;
 
         let signature = {
             let mut ctx = gpgme::Context::from_protocol(gpgme::Protocol::OpenPgp)?;
@@ -69,7 +77,7 @@ impl Repo {
         message: impl AsRef<str>,
         tree: &git2::Tree,
         parents: impl IntoIterator<Item = &'b Commit<'a>>,
-    ) -> Result<Commit<'a>, Box<dyn Error>>
+    ) -> Result<Commit<'a>, Error>
     where
         'a: 'b,
     {
@@ -90,7 +98,7 @@ impl Repo {
         &'a self,
         first: &Commit<'a>,
         second: &Commit<'a>,
-    ) -> Result<Commit<'a>, Box<dyn Error>> {
+    ) -> Result<Commit<'a>, Error> {
         let mut index = self
             .0
             .merge_commits(first.as_ref(), second.as_ref(), None)?;

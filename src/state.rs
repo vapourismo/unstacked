@@ -1,4 +1,7 @@
-use crate::repo::Repo;
+use crate::{
+    commit::{self, Commit},
+    repo::Repo,
+};
 use git2::{Oid, ResetType};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +13,7 @@ pub struct Manager {
 pub enum Error {
     Git(git2::Error),
     Serde(serde_json::Error),
+    Commit(commit::Error),
     UnexpectedHEAD,
 }
 

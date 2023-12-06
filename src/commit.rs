@@ -1,5 +1,17 @@
-use crate::repo::Repo;
-use std::error::Error;
+use crate::repo::{self, Repo};
+use git2::Oid;
+
+#[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
+pub enum Error {
+    Git(git2::Error),
+    Repo(repo::Error),
+
+    #[display(fmt = "Could not cherry-pick {cherry} onto {commit} in a conflict-free way")]
+    CherryPickError {
+        commit: Oid,
+        cherry: Oid,
+    },
+}
 
 #[derive(
     Clone,
@@ -17,18 +29,16 @@ impl<'a> Commit<'a> {
         repo: &'a Repo,
         cherry: &Self,
         sign: bool,
-    ) -> Result<Commit<'a>, Box<dyn Error>> {
+    ) -> Result<Commit<'a>, Error> {
         assert_eq!(cherry.0.parent_count(), 1);
 
         let mut new_index = repo.0.cherrypick_commit(&cherry.0, &self.0, 0, None)?;
 
         if new_index.has_conflicts() {
-            return Err(format!(
-                "Could not cherry-pick {} onto {} in a conflict-free way",
-                cherry.id(),
-                self.id()
-            )
-            .into());
+            return Err(Error::CherryPickError {
+                cherry: cherry.id(),
+                commit: self.id(),
+            });
         }
 
         let new_tree = repo.0.find_tree(new_index.write_tree_to(&repo.0)?)?;
