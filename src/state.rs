@@ -54,6 +54,15 @@ impl Serialize for PlainOid {
     }
 }
 
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum MoveResult {
+    #[display(fmt = "HEAD has not moved")]
+    Stationary,
+
+    #[display(fmt = "{from} -> {to}")]
+    Moved { from: Oid, to: Oid },
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct State {
     next: Box<Unrealised>,
@@ -100,9 +109,12 @@ impl State {
         }
     }
 
-    pub fn prev(&mut self, mgr: &Manager) -> Result<(), Error> {
+    pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
         match self.head.as_ref() {
-            Realised::Commit { commit, prev } => todo!(),
+            Realised::Commit { commit, prev } => {
+                todo!()
+            }
+
             Realised::Stop => {
                 let head = mgr.repo.head()?.peel_to_commit()?;
                 let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
@@ -122,13 +134,16 @@ impl State {
                     .0
                     .reset(parent.as_object(), ResetType::Soft, None)?;
                 self.write(mgr)?;
+
+                Ok(MoveResult::Moved {
+                    from: head.id(),
+                    to: parent_id,
+                })
             }
         }
-
-        Ok(())
     }
 
-    pub fn next(&mut self, mgr: &Manager) -> Result<(), Error> {
+    pub fn next(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
                 let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();
@@ -160,12 +175,15 @@ impl State {
                     .0
                     .reset(new_head.as_object(), ResetType::Soft, None)?;
                 self.write(mgr)?;
+
+                Ok(MoveResult::Moved {
+                    from: head.id(),
+                    to: new_head.id(),
+                })
             }
 
-            Unrealised::Stop => {}
+            Unrealised::Stop => Ok(MoveResult::Stationary),
         }
-
-        Ok(())
     }
 }
 

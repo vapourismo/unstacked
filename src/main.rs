@@ -124,12 +124,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         Cmd::Next {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-            state.next(&mgr)?;
+            let moved = state.next(&mgr)?;
+            eprintln!("{moved}");
         }
 
         Cmd::Prev {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-            state.prev(&mgr)?;
+            let moved = state.prev(&mgr)?;
+            eprintln!("{moved}");
         }
 
         Cmd::Test {} => {
