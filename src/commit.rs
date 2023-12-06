@@ -1,7 +1,14 @@
 use crate::repo::Repo;
 use std::error::Error;
 
-#[derive(Clone)]
+#[derive(
+    Clone,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
+    derive_more::AsMut,
+    derive_more::Deref,
+)]
 pub struct Commit<'a>(pub git2::Commit<'a>);
 
 impl<'a> Commit<'a> {
@@ -49,11 +56,5 @@ impl<'a> Commit<'a> {
 
     pub fn id(&self) -> git2::Oid {
         self.0.id()
-    }
-}
-
-impl<'a> AsRef<Commit<'a>> for Commit<'a> {
-    fn as_ref(&self) -> &Self {
-        self
     }
 }

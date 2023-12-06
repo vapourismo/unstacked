@@ -4,6 +4,9 @@ use git2::Oid;
 use crate::commit::Commit;
 use std::{error::Error, path::Path};
 
+#[derive(
+    derive_more::From, derive_more::Into, derive_more::AsRef, derive_more::AsMut, derive_more::Deref,
+)]
 pub struct Repo(pub git2::Repository);
 
 impl Repo {
