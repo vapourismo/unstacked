@@ -26,17 +26,25 @@ impl Repo {
         Ok(Commit(commit))
     }
 
-    pub fn commit_signed<'a>(
+    pub fn commit_signed<'a, 'b>(
         &'a self,
         author: &git2::Signature,
         committer: &git2::Signature,
         message: impl AsRef<str>,
         tree: &git2::Tree,
-        parent: &Commit,
-    ) -> Result<Commit<'a>, Box<dyn Error>> {
-        let commit_buffer =
-            self.0
-                .commit_create_buffer(author, committer, message.as_ref(), tree, &[&parent.0])?;
+        parents: impl IntoIterator<Item = &'b Commit<'a>>,
+    ) -> Result<Commit<'a>, Box<dyn Error>>
+    where
+        'a: 'b,
+    {
+        let parents: Vec<_> = parents.into_iter().map(|c| c.as_ref()).collect();
+        let commit_buffer = self.0.commit_create_buffer(
+            author,
+            committer,
+            message.as_ref(),
+            tree,
+            parents.as_slice(),
+        )?;
         let commit_buffer_str = commit_buffer
             .as_str()
             .ok_or_else(|| -> Box<dyn Error> { "Empty commit buffer string".into() })?;
@@ -55,21 +63,25 @@ impl Repo {
         Ok(Commit(new_commit))
     }
 
-    pub fn commit<'a>(
+    pub fn commit<'a, 'b>(
         &'a self,
         author: &git2::Signature,
         committer: &git2::Signature,
         message: impl AsRef<str>,
         tree: &git2::Tree,
-        parent: &Commit,
-    ) -> Result<Commit<'a>, Box<dyn Error>> {
+        parents: impl IntoIterator<Item = &'b Commit<'a>>,
+    ) -> Result<Commit<'a>, Box<dyn Error>>
+    where
+        'a: 'b,
+    {
+        let parents: Vec<_> = parents.into_iter().map(|c| c.as_ref()).collect();
         let new_commit_oid = self.0.commit(
             None,
             author,
             committer,
             message.as_ref(),
             tree,
-            &[&parent.0],
+            parents.as_slice(),
         )?;
         let new_commit = self.0.find_commit(new_commit_oid)?;
         Ok(Commit(new_commit))

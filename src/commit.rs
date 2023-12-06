@@ -39,7 +39,7 @@ impl<'a> Commit<'a> {
                 &cherry.0.committer(),
                 cherry.0.message().unwrap_or(""),
                 &new_tree,
-                &self,
+                [self],
             )?
         } else {
             repo.commit(
@@ -47,7 +47,7 @@ impl<'a> Commit<'a> {
                 &cherry.0.committer(),
                 cherry.0.message().unwrap_or(""),
                 &new_tree,
-                &self,
+                [self],
             )?
         };
 
