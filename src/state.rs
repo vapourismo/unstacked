@@ -110,9 +110,40 @@ impl State {
     }
 
     pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        match self.head.as_ref() {
+        let (new_next, new_head, parent, result) = match self.head.as_ref() {
             Realised::Commit { commit, prev } => {
-                todo!()
+                let new_head_commit = match prev.as_ref() {
+                    Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?,
+                    Realised::Stop => {
+                        let head = mgr.repo.0.find_commit(commit.0)?;
+                        let parent = head.parent_id(0)?;
+                        mgr.repo.0.find_commit(parent)?
+                    }
+                };
+                let new_head_commit_id = new_head_commit.id();
+
+                let new_next = Box::new(Unrealised::Commit {
+                    next: self.next.clone(),
+                    commit: commit.clone(),
+                });
+
+                let new_head = match prev.as_ref() {
+                    Realised::Commit { prev, .. } => prev.clone(),
+                    Realised::Stop => Box::new(Realised::Commit {
+                        commit: PlainOid(new_head_commit.id()),
+                        prev: Box::new(Realised::Stop),
+                    }),
+                };
+
+                (
+                    new_next,
+                    new_head,
+                    new_head_commit,
+                    MoveResult::Moved {
+                        from: commit.0,
+                        to: new_head_commit_id,
+                    },
+                )
             }
 
             Realised::Stop => {
@@ -120,27 +151,37 @@ impl State {
                 let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
                 let parent_id = parent.id();
 
-                self.next = Box::new(Unrealised::Commit {
+                let new_next = Box::new(Unrealised::Commit {
                     next: self.next.clone(),
                     commit: PlainOid(head.id()),
                 });
 
-                self.head = Box::new(Realised::Commit {
+                let new_head = Box::new(Realised::Commit {
                     commit: PlainOid(parent_id),
                     prev: Box::new(Realised::Stop),
                 });
 
-                mgr.repo
-                    .0
-                    .reset(parent.as_object(), ResetType::Soft, None)?;
-                self.write(mgr)?;
-
-                Ok(MoveResult::Moved {
-                    from: head.id(),
-                    to: parent_id,
-                })
+                (
+                    new_next,
+                    new_head,
+                    parent,
+                    MoveResult::Moved {
+                        from: head.id(),
+                        to: parent_id,
+                    },
+                )
             }
-        }
+        };
+
+        self.head = new_head;
+        self.next = new_next;
+
+        mgr.repo
+            .0
+            .reset(parent.as_object(), ResetType::Soft, None)?;
+        self.write(mgr)?;
+
+        Ok(result)
     }
 
     pub fn next(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
