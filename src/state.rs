@@ -230,11 +230,11 @@ impl State {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Unrealised {
+    Stop,
     Commit {
         next: Box<Unrealised>,
         commit: PlainOid,
     },
-    Stop,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
