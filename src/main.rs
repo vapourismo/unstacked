@@ -1,4 +1,5 @@
 mod commit;
+mod diffs;
 mod repo;
 mod state;
 
@@ -153,7 +154,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let msg = match msg {
                 Some(msg) => msg,
-                None => mgr.compose_commit_message(None)?,
+                None => {
+                    let diff = mgr.repo().0.diff_tree_to_index(
+                        Some(&mgr.repo().0.head()?.peel_to_commit()?.tree()?),
+                        Some(&mgr.repo().0.index()?),
+                        None,
+                    )?;
+                    mgr.compose_commit_message(None, Some(&diff))?
+                }
             };
             let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
 

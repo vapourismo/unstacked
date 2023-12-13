@@ -2,6 +2,7 @@ use std::{env, fs, io, path, process, string::FromUtf8Error};
 
 use crate::{
     commit::{self, Commit},
+    diffs,
     repo::{self, Repo},
 };
 use git2::{Oid, ResetType};
@@ -38,16 +39,24 @@ impl Manager {
         &self,
         msg_file: path::PathBuf,
         headline: Option<String>,
+        diff: Option<&git2::Diff>,
     ) -> Result<String, Error> {
         let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
 
         let headline = headline.unwrap_or("".to_string());
+        let diff = match diff {
+            Some(diff) => diffs::render(diff)?,
+            None => "".to_string(),
+        };
+
         let separator = "# ------------------------ >8 ------------------------";
         let init_contents = [
             headline.as_str(),
             "",
-            "# Everthing below the following line will be ignored.",
             separator,
+            "# Do not modify or remove the line above.",
+            "# Everything below it will be ignored.",
+            diff.as_str(),
         ]
         .join("\n");
         fs::write(&msg_file, &init_contents)?;
@@ -74,8 +83,12 @@ impl Manager {
         Ok(msg)
     }
 
-    pub fn compose_commit_message(&self, headline: Option<String>) -> Result<String, Error> {
-        self.compose_message(self.commit_message_file(), headline)
+    pub fn compose_commit_message(
+        &self,
+        headline: Option<String>,
+        diff: Option<&git2::Diff>,
+    ) -> Result<String, Error> {
+        self.compose_message(self.commit_message_file(), headline, diff)
     }
 }
 
