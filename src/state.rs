@@ -9,6 +9,16 @@ pub struct Manager {
     repo: Repo,
 }
 
+impl Manager {
+    pub fn new(repo: Repo) -> Self {
+        Self { repo }
+    }
+
+    pub fn repo(&self) -> &Repo {
+        &self.repo
+    }
+}
+
 #[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
 pub enum Error {
     Git(git2::Error),
@@ -19,16 +29,6 @@ pub enum Error {
 }
 
 const STATE_REF: &str = "refs/unstacked/state";
-
-impl Manager {
-    pub fn new(repo: Repo) -> Self {
-        Self { repo }
-    }
-
-    pub fn repo(&self) -> &Repo {
-        &self.repo
-    }
-}
 
 #[repr(transparent)]
 #[derive(Debug, derive_more::Display, Clone, Copy)]
