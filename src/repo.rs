@@ -1,6 +1,6 @@
 use crate::commit::Commit;
 use auth_git2::GitAuthenticator;
-use git2::{Diff, Oid};
+use git2::{Diff, Oid, ResetType};
 use std::{path::Path, str::Utf8Error};
 
 #[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
@@ -166,9 +166,23 @@ impl Repo {
         )
     }
 
+    pub fn unstaged_changes(&self) -> Result<Diff, git2::Error> {
+        self.0.diff_index_to_workdir(Some(&self.0.index()?), None)
+    }
+
     pub fn index_is_clean(&self) -> bool {
         self.staged_changes()
             .map(|changes| changes.deltas().len() == 0)
             .unwrap_or(false)
+    }
+
+    pub fn goto(&self, commit: &Commit) -> Result<(), git2::Error> {
+        self.0.reset(commit.as_object(), ResetType::Soft, None)?;
+
+        // TODO: Update index properly
+
+        // TODO: Update working dir
+
+        Ok(())
     }
 }

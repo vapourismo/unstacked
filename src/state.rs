@@ -246,10 +246,8 @@ impl State {
     }
 
     pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        assert!(mgr.repo().index_is_clean());
-
         let head = mgr.repo.head_commit()?;
-        let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
+        let parent: Commit = mgr.repo.0.find_commit(head.parent_id(0)?)?.into();
         let parent_id = parent.id();
 
         self.next = Box::new(Unrealised::Commit {
@@ -257,9 +255,7 @@ impl State {
             commit: PlainOid(head.id()),
         });
 
-        mgr.repo
-            .0
-            .reset(parent.as_object(), ResetType::Soft, None)?;
+        mgr.repo.goto(&parent)?;
         self.write(mgr)?;
 
         Ok(MoveResult::Moved {
@@ -270,8 +266,6 @@ impl State {
     }
 
     pub fn next(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        assert!(mgr.repo().index_is_clean());
-
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
                 let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();
@@ -290,9 +284,7 @@ impl State {
 
                 self.next = next.clone();
 
-                mgr.repo
-                    .0
-                    .reset(new_head.as_object(), ResetType::Soft, None)?;
+                mgr.repo.goto(&new_head)?;
                 self.write(mgr)?;
 
                 Ok(MoveResult::Moved {
