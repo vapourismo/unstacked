@@ -50,12 +50,15 @@ enum Cmd {
     },
 
     ///
+    #[command(alias = "n")]
     Next {},
 
     ///
+    #[command(alias = "p")]
     Prev {},
 
     /// Produce a new commit with the staged changes
+    #[command(alias = "co")]
     Commit {
         /// Commit message
         #[arg(short, long)]
@@ -63,6 +66,7 @@ enum Cmd {
     },
 
     /// Incorporate the staged changes into the active commit
+    #[command(alias = "am")]
     Amend {},
 
     ///
