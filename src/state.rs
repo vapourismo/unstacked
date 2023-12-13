@@ -20,16 +20,36 @@ impl Manager {
         &self.repo
     }
 
-    pub fn compose_message(&self, msg: Option<String>) -> Result<String, Error> {
+    fn dot_git_path(&self) -> path::PathBuf {
+        self.repo.path().into()
+    }
+
+    fn dot_git_child(&self, name: impl AsRef<path::Path>) -> path::PathBuf {
+        let mut path = self.dot_git_path();
+        path.push(name);
+        path
+    }
+
+    fn commit_message_file(&self) -> path::PathBuf {
+        self.dot_git_child("COMMIT_EDITMSG")
+    }
+
+    pub fn compose_message(
+        &self,
+        msg_file: path::PathBuf,
+        headline: Option<String>,
+    ) -> Result<String, Error> {
         let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
 
-        let msg_file = {
-            let mut path: path::PathBuf = self.repo.path().into();
-            path.push("UNSTACKED_MSG");
-            path
-        };
-
-        let init_contents = msg.unwrap_or("".to_string());
+        let headline = headline.unwrap_or("".to_string());
+        let separator = "# ------------------------ >8 ------------------------";
+        let init_contents = [
+            headline.as_str(),
+            "",
+            "# Everthing below the following line will be ignored.",
+            separator,
+        ]
+        .join("\n");
         fs::write(&msg_file, &init_contents)?;
 
         let exit = process::Command::new(editor)
@@ -41,9 +61,10 @@ impl Manager {
 
         let msg = fs::read(&msg_file)?;
         let msg = String::from_utf8(msg)?;
+        let msg = msg.split(separator).next().unwrap_or("").trim();
         fs::remove_file(&msg_file)?;
 
-        let all_whitespace = msg.trim().chars().all(|c| c.is_whitespace());
+        let all_whitespace = msg.chars().all(|c| c.is_whitespace());
         if all_whitespace {
             return Err(Error::EmptyMessage);
         }
@@ -51,6 +72,10 @@ impl Manager {
         let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
 
         Ok(msg)
+    }
+
+    pub fn compose_commit_message(&self, headline: Option<String>) -> Result<String, Error> {
+        self.compose_message(self.commit_message_file(), headline)
     }
 }
 

@@ -153,7 +153,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let msg = match msg {
                 Some(msg) => msg,
-                None => mgr.compose_message(None)?,
+                None => mgr.compose_commit_message(None)?,
             };
             let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
 
