@@ -1,6 +1,6 @@
 use crate::{
     commit::{self, Commit},
-    repo::Repo,
+    repo::{self, Repo},
 };
 use git2::{Oid, ResetType};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ pub struct Manager {
 pub enum Error {
     Git(git2::Error),
     Serde(serde_json::Error),
+    Repo(repo::Error),
     Commit(commit::Error),
     UnexpectedHEAD,
 }
@@ -225,6 +226,36 @@ impl State {
 
             Unrealised::Stop => Ok(MoveResult::Stationary),
         }
+    }
+
+    pub fn commit(&mut self, mgr: &Manager, msg: impl AsRef<str>) -> Result<MoveResult, Error> {
+        let head: Commit = match self.head.as_ref() {
+            Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?,
+            Realised::Stop => mgr.repo.0.head()?.peel_to_commit()?,
+        }
+        .into();
+
+        let mut index = mgr.repo.0.index()?;
+        let new_tree = index.write_tree_to(&mgr.repo.0)?;
+        let new_tree = mgr.repo.0.find_tree(new_tree)?;
+
+        let sig = mgr.repo.0.signature()?;
+        let new_head_commit = mgr.repo.commit(&sig, &sig, msg, &new_tree, [&head])?;
+
+        self.head = Box::new(Realised::Commit {
+            commit: PlainOid(new_head_commit.id()),
+            prev: self.head.clone(),
+        });
+
+        mgr.repo
+            .0
+            .reset(new_head_commit.as_object(), ResetType::Soft, None)?;
+        self.write(mgr)?;
+
+        Ok(MoveResult::Moved {
+            from: head.id(),
+            to: new_head_commit.id(),
+        })
     }
 }
 

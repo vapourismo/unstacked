@@ -55,6 +55,13 @@ enum Cmd {
     ///
     Prev {},
 
+    /// Produce a new commit with the staged changes
+    Commit {
+        /// Commit message
+        #[arg(short, long)]
+        msg: String,
+    },
+
     ///
     Test {},
 }
@@ -134,10 +141,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             eprintln!("{moved}");
         }
 
+        Cmd::Commit { msg } => {
+            let mut state = State::read(&mgr)?.validate(&mgr)?;
+            let moved = state.commit(&mgr, msg)?;
+            eprintln!("{moved}");
+        }
         Cmd::Test {} => {
             let state = State::read(&mgr)?.validate(&mgr)?;
             state.write(&mgr)?;
-            eprintln!("{state:?}");
+            eprintln!("{state:#?}");
         }
     }
 
