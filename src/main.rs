@@ -5,7 +5,7 @@ mod state;
 use clap::{Parser, Subcommand};
 use repo::Repo;
 use state::Manager;
-use std::error::Error;
+use std::{env, error::Error, fs, process};
 
 use crate::state::State;
 
@@ -59,7 +59,7 @@ enum Cmd {
     Commit {
         /// Commit message
         #[arg(short, long)]
-        msg: String,
+        msg: Option<String>,
     },
 
     /// Incorporate the staged changes into the active commit
@@ -109,6 +109,32 @@ fn chain(
     Ok(())
 }
 
+fn compose_message(msg: Option<String>) -> Result<String, Box<dyn Error>> {
+    let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
+
+    let msg_file = {
+        let mut path = env::temp_dir();
+        path.push("UNSTACKED_MSG");
+        path
+    };
+
+    fs::write(&msg_file, msg.unwrap_or("".to_string()))?;
+
+    let exit = process::Command::new(editor)
+        .arg(&msg_file)
+        .spawn()?
+        .wait()?;
+
+    assert!(exit.success());
+
+    let msg = fs::read(&msg_file)?;
+    fs::remove_file(&msg_file)?;
+
+    let msg = git2::message_prettify(String::from_utf8(msg)?, Some('#'.try_into().unwrap()))?;
+
+    Ok(msg)
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let repo = Repo::discover(args.repo.as_str())?;
@@ -146,7 +172,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         Cmd::Commit { msg } => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
+
+            let msg = match msg {
+                Some(msg) => msg,
+                None => compose_message(None)?,
+            };
             let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
+
             let moved = state.commit(&mgr, msg)?;
             eprintln!("{moved}");
         }
