@@ -158,14 +158,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         Cmd::Next {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let moved = state.next(&mgr)?;
-            eprintln!("{moved}");
+            let result = state.next(&mgr)?;
+            eprintln!("{result}");
         }
 
         Cmd::Prev {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let moved = state.prev(&mgr)?;
-            eprintln!("{moved}");
+            let result = state.prev(&mgr)?;
+            eprintln!("{result}");
         }
 
         Cmd::Commit { msg } => {
@@ -179,14 +179,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             };
 
-            let moved = state.commit(&mgr, msg)?;
-            eprintln!("{moved}");
+            let result = state.commit(&mgr, msg)?;
+            eprintln!("{result}");
         }
 
         Cmd::Amend {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let moved = state.amend(&mgr)?;
-            eprintln!("{moved}");
+            let result = state.amend(&mgr)?;
+            eprintln!("{result}");
         }
 
         Cmd::Edit {
@@ -231,8 +231,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 info = serde_json::de::from_str(info_edited.as_str())?;
             }
 
-            let moved = mgr.edit(&info)?;
-            eprintln!("{moved}");
+            let result = mgr.edit(&info)?;
+            eprintln!("{result}");
         }
 
         Cmd::Test {} => {

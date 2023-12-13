@@ -1,5 +1,3 @@
-use std::{env, fs, io, path, process, string::FromUtf8Error};
-
 use crate::{
     commit::{self, Commit},
     diffs,
@@ -7,6 +5,8 @@ use crate::{
 };
 use git2::{Oid, ResetType, Signature};
 use serde::{Deserialize, Serialize};
+use std::{env, fmt, fs, io, path, process, string::FromUtf8Error};
+use termion::color::*;
 
 pub struct Manager {
     repo: Repo,
@@ -157,11 +157,7 @@ impl Manager {
             .0
             .reset(new_head.as_object(), ResetType::Soft, None)?;
 
-        Ok(MoveResult::Moved {
-            from: head.id(),
-            to: new_head.id(),
-            message: new_head.message().unwrap_or("<no message>").to_string(),
-        })
+        Ok(MoveResult::moved(&head, &new_head))
     }
 }
 
@@ -203,13 +199,81 @@ impl Serialize for PlainOid {
     }
 }
 
-#[derive(Debug, Clone, derive_more::Display)]
+#[derive(Debug, Clone)]
 pub enum MoveResult {
-    #[display(fmt = "HEAD has not moved")]
-    Stationary,
+    Stationary {
+        head: Oid,
+        message: String,
+        author: String,
+        email: String,
+    },
 
-    #[display(fmt = "{from}..{to}: {message}")]
-    Moved { from: Oid, to: Oid, message: String },
+    Moved {
+        from: Oid,
+        to: Oid,
+        message: String,
+        author: String,
+        email: String,
+    },
+}
+
+impl MoveResult {
+    fn stationary(head: &git2::Commit) -> Self {
+        let sig = head.author();
+        Self::Stationary {
+            head: head.id(),
+            message: head.message().unwrap_or("<no message>").to_string(),
+            author: sig.name().unwrap_or("Unknown").to_string(),
+            email: sig.email().unwrap_or("unknown").to_string(),
+        }
+    }
+
+    fn moved(from: &git2::Commit, to: &git2::Commit) -> Self {
+        let sig = to.author();
+        Self::Moved {
+            from: from.id(),
+            to: to.id(),
+            message: to.message().unwrap_or("<no message>").to_string(),
+            author: sig.name().unwrap_or("Unknown").to_string(),
+            email: sig.email().unwrap_or("unknown").to_string(),
+        }
+    }
+}
+impl fmt::Display for MoveResult {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MoveResult::Stationary {
+                head,
+                message,
+                author,
+                email,
+            } => {
+                writeln!(fmt, "commit  {}{head}{}", Fg(Green), Fg(Reset))?;
+                writeln!(fmt, "author  {}{author} <{email}>{}", Fg(Yellow), Fg(Reset))?;
+                write!(fmt, "message {}{message}{}", Fg(Cyan), Fg(Reset))?;
+            }
+
+            MoveResult::Moved {
+                from,
+                to,
+                message,
+                author,
+                email,
+            } => {
+                writeln!(fmt, "previous {}{from}{}", Fg(Red), Fg(Reset))?;
+                writeln!(fmt, "commit   {}{to}{}", Fg(Green), Fg(Reset))?;
+                writeln!(
+                    fmt,
+                    "author   {}{author} <{email}>{}",
+                    Fg(Yellow),
+                    Fg(Reset)
+                )?;
+                write!(fmt, "message  {}{message}{}", Fg(Cyan), Fg(Reset))?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -248,7 +312,6 @@ impl State {
     pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
         let head = mgr.repo.head_commit()?;
         let parent: Commit = mgr.repo.0.find_commit(head.parent_id(0)?)?.into();
-        let parent_id = parent.id();
 
         self.next = Box::new(Unrealised::Commit {
             next: self.next.clone(),
@@ -258,18 +321,15 @@ impl State {
         mgr.repo.goto(&parent)?;
         self.write(mgr)?;
 
-        Ok(MoveResult::Moved {
-            from: head.id(),
-            to: parent_id,
-            message: parent.message().unwrap_or("<no message>").to_string(),
-        })
+        Ok(MoveResult::moved(&head, &parent))
     }
 
     pub fn next(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
+        let head: Commit = mgr.repo.head_commit()?;
+
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
                 let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();
-                let head: Commit = mgr.repo.head_commit()?;
 
                 let new_head = if cherry.parent_count() == 1
                     && cherry
@@ -287,14 +347,10 @@ impl State {
                 mgr.repo.goto(&new_head)?;
                 self.write(mgr)?;
 
-                Ok(MoveResult::Moved {
-                    from: head.id(),
-                    to: new_head.id(),
-                    message: new_head.message().unwrap_or("<no message>").to_string(),
-                })
+                Ok(MoveResult::moved(&head, &new_head))
             }
 
-            Unrealised::Stop => Ok(MoveResult::Stationary),
+            Unrealised::Stop => Ok(MoveResult::stationary(&head)),
         }
     }
 
@@ -313,14 +369,7 @@ impl State {
             .reset(new_head_commit.as_object(), ResetType::Soft, None)?;
         self.write(mgr)?;
 
-        Ok(MoveResult::Moved {
-            from: head.id(),
-            to: new_head_commit.id(),
-            message: new_head_commit
-                .message()
-                .unwrap_or("<no message>")
-                .to_string(),
-        })
+        Ok(MoveResult::moved(&head, &new_head_commit))
     }
 
     pub fn amend(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
@@ -338,14 +387,7 @@ impl State {
             .reset(new_head_commit.as_object(), ResetType::Soft, None)?;
         self.write(mgr)?;
 
-        Ok(MoveResult::Moved {
-            from: head.id(),
-            to: new_head_id,
-            message: new_head_commit
-                .message()
-                .unwrap_or("<no message>")
-                .to_string(),
-        })
+        Ok(MoveResult::moved(&head, &new_head_commit))
     }
 }
 

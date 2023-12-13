@@ -9,6 +9,8 @@ pub enum Error {
     Gpg(gpgme::Error),
     Utf8(Utf8Error),
     EmptyCommitMessage,
+    IndexConflicts,
+    WorkingDirConflicts,
 }
 
 #[derive(
@@ -176,12 +178,63 @@ impl Repo {
             .unwrap_or(false)
     }
 
-    pub fn goto(&self, commit: &Commit) -> Result<(), git2::Error> {
-        self.0.reset(commit.as_object(), ResetType::Soft, None)?;
+    fn index_tree(&self) -> Result<git2::Tree, Error> {
+        let mut index = self.0.index()?;
+        index.read(false)?;
 
-        // TODO: Update index properly
+        let index_tree_id = index.write_tree_to(&self.0)?;
+        let index_tree = self.0.find_tree(index_tree_id)?;
 
-        // TODO: Update working dir
+        Ok(index_tree)
+    }
+
+    fn working_tree(&self, index_tree: &git2::Tree) -> Result<git2::Tree, Error> {
+        let unstaged_changes = self.0.diff_tree_to_workdir(Some(index_tree), None)?;
+        let mut workdir = self.apply_to_tree(index_tree, &unstaged_changes, None)?;
+
+        if workdir.has_conflicts() {
+            Err(Error::WorkingDirConflicts)?
+        }
+
+        let wt_tree_id = workdir.write_tree_to(&self.0)?;
+        let wt_tree = self.0.find_tree(wt_tree_id)?;
+
+        Ok(wt_tree)
+    }
+
+    pub fn goto(&self, commit: &Commit) -> Result<(), Error> {
+        // Index
+        let mut index = self.0.index()?;
+        index.read(false)?;
+
+        // Obtain tree for the currently staged changes
+        let current_index_tree = self.index_tree()?;
+
+        // Rebase the changes on top of the destination tree
+        let head_tree = self.head_commit()?.tree()?;
+        let target_tree = commit.tree()?;
+        let mut new_index =
+            self.merge_trees(&head_tree, &current_index_tree, &target_tree, None)?;
+        assert!(!new_index.has_conflicts());
+        let new_index_tree = self.0.find_tree(new_index.write_tree_to(&self.0)?)?;
+
+        // Obtain working directory changes relative to the new index tree
+        let workdir_tree = self.working_tree(&new_index_tree)?;
+
+        // Rebase the working directory changes on top of the destination tree
+        let mut new_workdir = self.merge_trees(&head_tree, &workdir_tree, &target_tree, None)?;
+        assert!(!new_workdir.has_conflicts());
+        let new_workdir_tree = self.0.find_tree(new_workdir.write_tree_to(&self.0)?)?;
+
+        // Move HEAD
+        self.reset(commit.as_object(), ResetType::Hard, None)?;
+
+        // Ensure working tree has the right changes.
+        self.checkout_tree(new_workdir_tree.as_object(), None)?;
+
+        // [checkout_tree] above also updates the index, so we need to reset that one.
+        index.read_tree(&new_index_tree)?;
+        index.write()?;
 
         Ok(())
     }
