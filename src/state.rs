@@ -246,6 +246,8 @@ impl State {
     }
 
     pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
+        assert!(mgr.repo().index_is_clean());
+
         let head = mgr.repo.head_commit()?;
         let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
         let parent_id = parent.id();
@@ -268,6 +270,8 @@ impl State {
     }
 
     pub fn next(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
+        assert!(mgr.repo().index_is_clean());
+
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
                 let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();

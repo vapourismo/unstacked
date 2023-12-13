@@ -165,4 +165,10 @@ impl Repo {
             None,
         )
     }
+
+    pub fn index_is_clean(&self) -> bool {
+        self.staged_changes()
+            .map(|changes| changes.deltas().len() == 0)
+            .unwrap_or(false)
+    }
 }
