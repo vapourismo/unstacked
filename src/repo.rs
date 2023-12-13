@@ -9,6 +9,8 @@ pub enum Error {
     Gpg(gpgme::Error),
     Utf8(Utf8Error),
     EmptyCommitMessage,
+    IndexConflicts,
+    WorkingDirConflicts,
 }
 
 #[derive(
@@ -176,12 +178,45 @@ impl Repo {
             .unwrap_or(false)
     }
 
-    pub fn goto(&self, commit: &Commit) -> Result<(), git2::Error> {
-        self.0.reset(commit.as_object(), ResetType::Soft, None)?;
+    pub fn goto(&self, commit: &Commit) -> Result<(), Error> {
+        // Prepare new index
+        let head_tree = self.head_commit()?.tree()?;
+        let target_tree = commit.tree()?;
+        let mut current_index = self.0.index()?;
+        current_index.read(false)?;
+        let current_index_tree = self.0.find_tree(current_index.write_tree_to(&self.0)?)?;
+        let mut new_index =
+            self.0
+                .merge_trees(&head_tree, &current_index_tree, &target_tree, None)?;
+        assert!(!new_index.has_conflicts());
+        let new_index_tree = self.0.find_tree(new_index.write_tree_to(&self.0)?)?;
 
-        // TODO: Update index properly
+        // Prepare new working directory
+        let mut current_wt_index =
+            self.apply_to_tree(&head_tree, &self.unstaged_changes()?, None)?;
+        assert!(!current_wt_index.has_conflicts());
+        let current_wt_tree = self.0.find_tree(current_wt_index.write_tree_to(&self.0)?)?;
+        let mut new_wt_index =
+            self.0
+                .merge_trees(&head_tree, &current_wt_tree, &target_tree, None)?;
 
-        // TODO: Update working dir
+        for c in new_wt_index.conflicts()? {
+            let c = c?;
+            eprintln!("{:?} {:?} {:?}", c.ancestor, c.our, c.their);
+        }
+
+        assert!(!new_wt_index.has_conflicts());
+
+        // HEAD
+        self.0.reset(commit.as_object(), ResetType::Hard, None)?;
+
+        // Working directory
+        self.0.checkout_index(Some(&mut new_wt_index), None)?;
+
+        // Index
+        current_index.read(true)?;
+        current_index.read_tree(&new_index_tree)?;
+        current_index.write()?;
 
         Ok(())
     }
