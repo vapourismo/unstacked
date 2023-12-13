@@ -163,7 +163,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     mgr.compose_commit_message(None, Some(&diff))?
                 }
             };
-            let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
 
             let moved = state.commit(&mgr, msg)?;
             eprintln!("{moved}");
