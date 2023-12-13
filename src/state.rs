@@ -1,3 +1,5 @@
+use std::{env, fs, io, process, string::FromUtf8Error};
+
 use crate::{
     commit::{self, Commit},
     repo::{self, Repo},
@@ -17,6 +19,39 @@ impl Manager {
     pub fn repo(&self) -> &Repo {
         &self.repo
     }
+
+    pub fn compose_message(&self, msg: Option<String>) -> Result<String, Error> {
+        let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
+
+        let msg_file = {
+            let mut path = env::temp_dir();
+            path.push("UNSTACKED_MSG");
+            path
+        };
+
+        let init_contents = msg.unwrap_or("".to_string());
+        fs::write(&msg_file, &init_contents)?;
+
+        let exit = process::Command::new(editor)
+            .arg(&msg_file)
+            .spawn()?
+            .wait()?;
+
+        assert!(exit.success());
+
+        let msg = fs::read(&msg_file)?;
+        let msg = String::from_utf8(msg)?;
+        fs::remove_file(&msg_file)?;
+
+        let all_whitespace = msg.trim().chars().all(|c| c.is_whitespace());
+        if all_whitespace {
+            return Err(Error::EmptyMessage);
+        }
+
+        let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
+
+        Ok(msg)
+    }
 }
 
 #[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
@@ -25,7 +60,9 @@ pub enum Error {
     Serde(serde_json::Error),
     Repo(repo::Error),
     Commit(commit::Error),
-    UnexpectedHEAD,
+    IO(io::Error),
+    Utf8(FromUtf8Error),
+    EmptyMessage,
 }
 
 const STATE_REF: &str = "refs/unstacked/state";

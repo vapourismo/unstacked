@@ -5,7 +5,7 @@ mod state;
 use clap::{Parser, Subcommand};
 use repo::Repo;
 use state::Manager;
-use std::{env, error::Error, fs, process};
+use std::error::Error;
 
 use crate::state::State;
 
@@ -113,39 +113,6 @@ fn chain(
     Ok(())
 }
 
-fn compose_message(msg: Option<String>) -> Result<String, Box<dyn Error>> {
-    let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
-
-    let msg_file = {
-        let mut path = env::temp_dir();
-        path.push("UNSTACKED_MSG");
-        path
-    };
-
-    let init_contents = msg.unwrap_or("".to_string());
-    fs::write(&msg_file, &init_contents)?;
-
-    let exit = process::Command::new(editor)
-        .arg(&msg_file)
-        .spawn()?
-        .wait()?;
-
-    assert!(exit.success());
-
-    let msg = fs::read(&msg_file)?;
-    let msg = String::from_utf8(msg)?;
-    fs::remove_file(&msg_file)?;
-
-    let all_whitespace = msg.trim().chars().all(|c| c.is_whitespace());
-    if all_whitespace {
-        return Err("Empty message".into());
-    }
-
-    let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
-
-    Ok(msg)
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let repo = Repo::discover(args.repo.as_str())?;
@@ -186,7 +153,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let msg = match msg {
                 Some(msg) => msg,
-                None => compose_message(None)?,
+                None => mgr.compose_message(None)?,
             };
             let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
 
