@@ -70,7 +70,7 @@ enum Cmd {
     #[command(alias = "am")]
     Amend {},
 
-    ///
+    /// Edit commit meta data
     #[command(alias = "ed")]
     Edit {
         #[arg(long = "author-name")]
