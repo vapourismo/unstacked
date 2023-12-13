@@ -62,6 +62,9 @@ enum Cmd {
         msg: String,
     },
 
+    /// Incorporate the staged changes into the active commit
+    Amend {},
+
     ///
     Test {},
 }
@@ -146,6 +149,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let moved = state.commit(&mgr, msg)?;
             eprintln!("{moved}");
         }
+
+        Cmd::Amend {} => {
+            let mut state = State::read(&mgr)?.validate(&mgr)?;
+            let moved = state.amend(&mgr)?;
+            eprintln!("{moved}");
+        }
+
         Cmd::Test {} => {
             let state = State::read(&mgr)?.validate(&mgr)?;
             state.write(&mgr)?;

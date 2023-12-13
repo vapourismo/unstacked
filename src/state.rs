@@ -257,6 +257,40 @@ impl State {
             to: new_head_commit.id(),
         })
     }
+
+    pub fn amend(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
+        let (head, prev) = match self.head.as_ref() {
+            Realised::Commit { commit, prev } => (mgr.repo.0.find_commit(commit.0)?, prev.clone()),
+            Realised::Stop => (
+                mgr.repo.0.head()?.peel_to_commit()?,
+                Box::new(Realised::Stop),
+            ),
+        };
+
+        let mut index = mgr.repo.0.index()?;
+        let new_tree = index.write_tree_to(&mgr.repo.0)?;
+        let new_tree = mgr.repo.0.find_tree(new_tree)?;
+
+        let new_head_id = head.amend(None, None, None, None, None, Some(&new_tree))?;
+        let new_head_commit = mgr.repo.0.find_commit(new_head_id)?;
+
+        let new_head = Realised::Commit {
+            commit: PlainOid(new_head_commit.id()),
+            prev: prev.clone(),
+        };
+
+        self.head = Box::new(new_head);
+
+        mgr.repo
+            .0
+            .reset(new_head_commit.as_object(), ResetType::Soft, None)?;
+        self.write(mgr)?;
+
+        Ok(MoveResult::Moved {
+            from: head.id(),
+            to: new_head_id,
+        })
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
