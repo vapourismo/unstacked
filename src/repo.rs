@@ -1,6 +1,6 @@
 use crate::commit::Commit;
 use auth_git2::GitAuthenticator;
-use git2::Oid;
+use git2::{Diff, Oid};
 use std::{path::Path, str::Utf8Error};
 
 #[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
@@ -156,5 +156,13 @@ impl Repo {
         let merge_base = self.0.merge_base_many(&oids)?;
         let commit = self.0.find_commit(merge_base)?;
         Ok(Commit(commit))
+    }
+
+    pub fn staged_changes(&self) -> Result<Diff, git2::Error> {
+        self.0.diff_tree_to_index(
+            Some(&self.head_commit()?.tree()?),
+            Some(&self.0.index()?),
+            None,
+        )
     }
 }

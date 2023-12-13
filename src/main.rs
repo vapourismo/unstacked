@@ -174,11 +174,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let msg = match msg {
                 Some(msg) => msg,
                 None => {
-                    let diff = mgr.repo().0.diff_tree_to_index(
-                        Some(&mgr.repo().head_commit()?.tree()?),
-                        Some(&mgr.repo().0.index()?),
-                        None,
-                    )?;
+                    let diff = mgr.repo().staged_changes()?;
                     mgr.compose_commit_message(None, Some(&diff))?
                 }
             };
