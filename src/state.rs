@@ -67,7 +67,6 @@ pub enum MoveResult {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct State {
     next: Box<Unrealised>,
-    head: Box<Realised>,
 }
 
 impl State {
@@ -80,8 +79,7 @@ impl State {
 
             Err(git_error) if git_error.code() == git2::ErrorCode::NotFound => {
                 let next = Box::new(Unrealised::Stop);
-                let head = Box::new(Realised::Stop);
-                Ok(State { next, head })
+                Ok(State { next })
             }
 
             Err(err) => Err(err.into()),
@@ -95,105 +93,36 @@ impl State {
         Ok(())
     }
 
-    pub fn validate(self, mgr: &Manager) -> Result<Self, Error> {
-        match self.head.as_ref() {
-            Realised::Commit { commit, .. } => {
-                let head = mgr.repo.head()?.peel_to_commit()?;
-
-                if head.id() != commit.0 {
-                    return Err(Error::UnexpectedHEAD);
-                }
-
-                Ok(self)
-            }
-            Realised::Stop => Ok(self),
-        }
+    pub fn validate(self, _mgr: &Manager) -> Result<Self, Error> {
+        Ok(self)
     }
 
     pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        let (new_next, new_head, parent, result) = match self.head.as_ref() {
-            Realised::Commit { commit, prev } => {
-                let new_head_commit = match prev.as_ref() {
-                    Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?,
-                    Realised::Stop => {
-                        let head = mgr.repo.0.find_commit(commit.0)?;
-                        let parent = head.parent_id(0)?;
-                        mgr.repo.0.find_commit(parent)?
-                    }
-                };
-                let new_head_commit_id = new_head_commit.id();
+        let head = mgr.repo.head()?.peel_to_commit()?;
+        let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
+        let parent_id = parent.id();
 
-                let new_next = Box::new(Unrealised::Commit {
-                    next: self.next.clone(),
-                    commit: commit.clone(),
-                });
-
-                let new_head = match prev.as_ref() {
-                    Realised::Commit { prev, .. } => prev.clone(),
-                    Realised::Stop => Box::new(Realised::Commit {
-                        commit: PlainOid(new_head_commit.id()),
-                        prev: Box::new(Realised::Stop),
-                    }),
-                };
-
-                (
-                    new_next,
-                    new_head,
-                    new_head_commit,
-                    MoveResult::Moved {
-                        from: commit.0,
-                        to: new_head_commit_id,
-                    },
-                )
-            }
-
-            Realised::Stop => {
-                let head = mgr.repo.head()?.peel_to_commit()?;
-                let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
-                let parent_id = parent.id();
-
-                let new_next = Box::new(Unrealised::Commit {
-                    next: self.next.clone(),
-                    commit: PlainOid(head.id()),
-                });
-
-                let new_head = Box::new(Realised::Commit {
-                    commit: PlainOid(parent_id),
-                    prev: Box::new(Realised::Stop),
-                });
-
-                (
-                    new_next,
-                    new_head,
-                    parent,
-                    MoveResult::Moved {
-                        from: head.id(),
-                        to: parent_id,
-                    },
-                )
-            }
-        };
-
-        self.head = new_head;
-        self.next = new_next;
+        self.next = Box::new(Unrealised::Commit {
+            next: self.next.clone(),
+            commit: PlainOid(head.id()),
+        });
 
         mgr.repo
             .0
             .reset(parent.as_object(), ResetType::Soft, None)?;
         self.write(mgr)?;
 
-        Ok(result)
+        Ok(MoveResult::Moved {
+            from: head.id(),
+            to: parent_id,
+        })
     }
 
     pub fn next(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
                 let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();
-
-                let head: Commit = match self.head.as_ref() {
-                    Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?.into(),
-                    Realised::Stop => mgr.repo.head()?.peel_to_commit()?.into(),
-                };
+                let head: Commit = mgr.repo.head()?.peel_to_commit()?.into();
 
                 let new_head = if cherry.parent_count() == 1
                     && cherry
@@ -207,11 +136,6 @@ impl State {
                 };
 
                 self.next = next.clone();
-
-                self.head = Box::new(Realised::Commit {
-                    commit: PlainOid(new_head.id()),
-                    prev: self.head.clone(),
-                });
 
                 mgr.repo
                     .0
@@ -229,11 +153,7 @@ impl State {
     }
 
     pub fn commit(&mut self, mgr: &Manager, msg: impl AsRef<str>) -> Result<MoveResult, Error> {
-        let head: Commit = match self.head.as_ref() {
-            Realised::Commit { commit, .. } => mgr.repo.0.find_commit(commit.0)?,
-            Realised::Stop => mgr.repo.0.head()?.peel_to_commit()?,
-        }
-        .into();
+        let head: Commit = mgr.repo.0.head()?.peel_to_commit()?.into();
 
         let mut index = mgr.repo.0.index()?;
         let new_tree = index.write_tree_to(&mgr.repo.0)?;
@@ -241,11 +161,6 @@ impl State {
 
         let sig = mgr.repo.0.signature()?;
         let new_head_commit = mgr.repo.commit(&sig, &sig, msg, &new_tree, [&head])?;
-
-        self.head = Box::new(Realised::Commit {
-            commit: PlainOid(new_head_commit.id()),
-            prev: self.head.clone(),
-        });
 
         mgr.repo
             .0
@@ -259,13 +174,7 @@ impl State {
     }
 
     pub fn amend(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        let (head, prev) = match self.head.as_ref() {
-            Realised::Commit { commit, prev } => (mgr.repo.0.find_commit(commit.0)?, prev.clone()),
-            Realised::Stop => (
-                mgr.repo.0.head()?.peel_to_commit()?,
-                Box::new(Realised::Stop),
-            ),
-        };
+        let head = mgr.repo.0.head()?.peel_to_commit()?;
 
         let mut index = mgr.repo.0.index()?;
         let new_tree = index.write_tree_to(&mgr.repo.0)?;
@@ -273,13 +182,6 @@ impl State {
 
         let new_head_id = head.amend(None, None, None, None, None, Some(&new_tree))?;
         let new_head_commit = mgr.repo.0.find_commit(new_head_id)?;
-
-        let new_head = Realised::Commit {
-            commit: PlainOid(new_head_commit.id()),
-            prev: prev.clone(),
-        };
-
-        self.head = Box::new(new_head);
 
         mgr.repo
             .0
@@ -300,13 +202,4 @@ pub enum Unrealised {
         next: Box<Unrealised>,
         commit: PlainOid,
     },
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub enum Realised {
-    Commit {
-        commit: PlainOid,
-        prev: Box<Realised>,
-    },
-    Stop,
 }
