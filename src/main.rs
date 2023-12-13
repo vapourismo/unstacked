@@ -71,6 +71,25 @@ enum Cmd {
     Amend {},
 
     ///
+    #[command(alias = "ed")]
+    Edit {
+        #[arg(long = "author-name")]
+        author_name: Option<String>,
+
+        #[arg(long = "author-email")]
+        author_email: Option<String>,
+
+        #[arg(long = "committer-name")]
+        committer_name: Option<String>,
+
+        #[arg(long = "committer-email")]
+        committer_email: Option<String>,
+
+        #[arg(short, long)]
+        message: Option<String>,
+    },
+
+    ///
     Test {},
 }
 
@@ -171,6 +190,52 @@ fn main() -> Result<(), Box<dyn Error>> {
         Cmd::Amend {} => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
             let moved = state.amend(&mgr)?;
+            eprintln!("{moved}");
+        }
+
+        Cmd::Edit {
+            author_name,
+            author_email,
+            committer_name,
+            committer_email,
+            message,
+        } => {
+            let mut info = mgr.commit_info()?;
+
+            let need_edit = author_name.is_none()
+                && author_email.is_none()
+                && committer_name.is_none()
+                && committer_email.is_none()
+                && message.is_none();
+
+            if let Some(author_name) = author_name {
+                info.author.name = author_name;
+            }
+
+            if let Some(author_email) = author_email {
+                info.author.email = author_email;
+            }
+
+            if let Some(committer_name) = committer_name {
+                info.committer.name = committer_name;
+            }
+
+            if let Some(committer_email) = committer_email {
+                info.committer.email = committer_email;
+            }
+
+            if let Some(message) = message {
+                info.message = message;
+            }
+
+            if need_edit {
+                let info_rendered = serde_json::ser::to_string_pretty(&info)?;
+                let info_edited =
+                    mgr.compose_message_plain(&mgr.commit_info_file(), info_rendered)?;
+                info = serde_json::de::from_str(info_edited.as_str())?;
+            }
+
+            let moved = mgr.edit(&info)?;
             eprintln!("{moved}");
         }
 

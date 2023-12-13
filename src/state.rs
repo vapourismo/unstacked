@@ -5,7 +5,7 @@ use crate::{
     diffs,
     repo::{self, Repo},
 };
-use git2::{Oid, ResetType};
+use git2::{Oid, ResetType, Signature};
 use serde::{Deserialize, Serialize};
 
 pub struct Manager {
@@ -35,14 +35,39 @@ impl Manager {
         self.dot_git_child("COMMIT_EDITMSG")
     }
 
-    pub fn compose_message(
+    pub fn commit_info_file(&self) -> path::PathBuf {
+        self.dot_git_child("COMMITINFO_EDIT")
+    }
+
+    pub fn compose_message_plain(
         &self,
-        msg_file: path::PathBuf,
-        headline: Option<String>,
-        diff: Option<&git2::Diff>,
+        msg_file: &path::PathBuf,
+        body: String,
     ) -> Result<String, Error> {
         let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
 
+        fs::write(msg_file, &body)?;
+
+        let exit = process::Command::new(editor)
+            .arg(msg_file)
+            .spawn()?
+            .wait()?;
+
+        assert!(exit.success());
+
+        let msg = fs::read(&msg_file)?;
+        let msg = String::from_utf8(msg)?;
+        fs::remove_file(&msg_file)?;
+
+        Ok(msg)
+    }
+
+    pub fn compose_message(
+        &self,
+        msg_file: &path::PathBuf,
+        headline: Option<String>,
+        diff: Option<&git2::Diff>,
+    ) -> Result<String, Error> {
         let headline = headline.unwrap_or("".to_string());
         let diff = match diff {
             Some(diff) => diffs::render(diff)?,
@@ -59,19 +84,9 @@ impl Manager {
             diff.as_str(),
         ]
         .join("\n");
-        fs::write(&msg_file, &init_contents)?;
 
-        let exit = process::Command::new(editor)
-            .arg(&msg_file)
-            .spawn()?
-            .wait()?;
-
-        assert!(exit.success());
-
-        let msg = fs::read(&msg_file)?;
-        let msg = String::from_utf8(msg)?;
+        let msg = self.compose_message_plain(msg_file, init_contents)?;
         let msg = msg.split(separator).next().unwrap_or("").trim();
-        fs::remove_file(&msg_file)?;
 
         let all_whitespace = msg.chars().all(|c| c.is_whitespace());
         if all_whitespace {
@@ -88,7 +103,65 @@ impl Manager {
         headline: Option<String>,
         diff: Option<&git2::Diff>,
     ) -> Result<String, Error> {
-        self.compose_message(self.commit_message_file(), headline, diff)
+        self.compose_message(&self.commit_message_file(), headline, diff)
+    }
+
+    pub fn commit_info(&self) -> Result<CommitInfo, Error> {
+        let head = self.repo.0.head()?.peel_to_commit()?;
+
+        let author = head.author();
+        let author = PlainSig {
+            name: author.name().unwrap_or("").to_string(),
+            email: author.email().unwrap_or("").to_string(),
+        };
+
+        let committer = head.committer();
+        let committer = PlainSig {
+            name: committer.name().unwrap_or("").to_string(),
+            email: committer.email().unwrap_or("").to_string(),
+        };
+
+        Ok(CommitInfo {
+            author,
+            committer,
+            message: head.message().unwrap_or("").to_string(),
+        })
+    }
+
+    pub fn edit(&self, info: &CommitInfo) -> Result<MoveResult, Error> {
+        let head = self.repo.0.head()?.peel_to_commit()?;
+
+        let author = Signature::new(
+            info.author.name.as_str(),
+            info.author.email.as_str(),
+            &head.author().when(),
+        )?;
+
+        let committer = Signature::new(
+            info.committer.name.as_str(),
+            info.committer.email.as_str(),
+            &head.committer().when(),
+        )?;
+
+        let new_head = head.amend(
+            None,
+            Some(&author),
+            Some(&committer),
+            None,
+            Some(&info.message.as_str()),
+            Some(&head.tree()?),
+        )?;
+        let new_head = self.repo.0.find_commit(new_head)?;
+
+        self.repo
+            .0
+            .reset(new_head.as_object(), ResetType::Soft, None)?;
+
+        Ok(MoveResult::Moved {
+            from: head.id(),
+            to: new_head.id(),
+            message: new_head.message().unwrap_or("<no message>").to_string(),
+        })
     }
 }
 
@@ -287,4 +360,17 @@ pub enum Unrealised {
         next: Box<Unrealised>,
         commit: PlainOid,
     },
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct PlainSig {
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct CommitInfo {
+    pub author: PlainSig,
+    pub committer: PlainSig,
+    pub message: String,
 }
