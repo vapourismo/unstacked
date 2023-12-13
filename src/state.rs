@@ -1,4 +1,4 @@
-use std::{env, fs, io, process, string::FromUtf8Error};
+use std::{env, fs, io, path, process, string::FromUtf8Error};
 
 use crate::{
     commit::{self, Commit},
@@ -24,7 +24,7 @@ impl Manager {
         let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
 
         let msg_file = {
-            let mut path = env::temp_dir();
+            let mut path: path::PathBuf = self.repo.path().into();
             path.push("UNSTACKED_MSG");
             path
         };
