@@ -60,7 +60,7 @@ pub enum MoveResult {
     #[display(fmt = "HEAD has not moved")]
     Stationary,
 
-    #[display(fmt = "{from} -> {to}")]
+    #[display(fmt = "{from}..{to}")]
     Moved { from: Oid, to: Oid },
 }
 
