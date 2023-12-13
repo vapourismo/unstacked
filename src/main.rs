@@ -118,7 +118,8 @@ fn compose_message(msg: Option<String>) -> Result<String, Box<dyn Error>> {
         path
     };
 
-    fs::write(&msg_file, msg.unwrap_or("".to_string()))?;
+    let init_contents = msg.unwrap_or("".to_string());
+    fs::write(&msg_file, &init_contents)?;
 
     let exit = process::Command::new(editor)
         .arg(&msg_file)
@@ -128,9 +129,15 @@ fn compose_message(msg: Option<String>) -> Result<String, Box<dyn Error>> {
     assert!(exit.success());
 
     let msg = fs::read(&msg_file)?;
+    let msg = String::from_utf8(msg)?;
     fs::remove_file(&msg_file)?;
 
-    let msg = git2::message_prettify(String::from_utf8(msg)?, Some('#'.try_into().unwrap()))?;
+    let all_whitespace = msg.trim().chars().all(|c| c.is_whitespace());
+    if all_whitespace {
+        return Err("Empty message".into());
+    }
+
+    let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
 
     Ok(msg)
 }
