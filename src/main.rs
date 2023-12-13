@@ -146,6 +146,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         Cmd::Commit { msg } => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
+            let msg = git2::message_prettify(msg, Some('#'.try_into().unwrap()))?;
             let moved = state.commit(&mgr, msg)?;
             eprintln!("{moved}");
         }
