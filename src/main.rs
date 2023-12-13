@@ -175,7 +175,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Some(msg) => msg,
                 None => {
                     let diff = mgr.repo().0.diff_tree_to_index(
-                        Some(&mgr.repo().0.head()?.peel_to_commit()?.tree()?),
+                        Some(&mgr.repo().head_commit()?.tree()?),
                         Some(&mgr.repo().0.index()?),
                         None,
                     )?;

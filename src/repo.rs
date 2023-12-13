@@ -33,6 +33,11 @@ impl Repo {
         Ok(Commit(commit))
     }
 
+    pub fn head_commit(&self) -> Result<Commit, git2::Error> {
+        let commit = self.0.head()?.peel_to_commit()?;
+        Ok(Commit(commit))
+    }
+
     pub fn commit_signed<'a, 'b>(
         &'a self,
         author: &git2::Signature,

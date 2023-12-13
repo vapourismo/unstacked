@@ -107,7 +107,7 @@ impl Manager {
     }
 
     pub fn commit_info(&self) -> Result<CommitInfo, Error> {
-        let head = self.repo.0.head()?.peel_to_commit()?;
+        let head = self.repo.head_commit()?;
 
         let author = head.author();
         let author = PlainSig {
@@ -129,7 +129,7 @@ impl Manager {
     }
 
     pub fn edit(&self, info: &CommitInfo) -> Result<MoveResult, Error> {
-        let head = self.repo.0.head()?.peel_to_commit()?;
+        let head = self.repo.head_commit()?;
 
         let author = Signature::new(
             info.author.name.as_str(),
@@ -246,7 +246,7 @@ impl State {
     }
 
     pub fn prev(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        let head = mgr.repo.head()?.peel_to_commit()?;
+        let head = mgr.repo.head_commit()?;
         let parent = mgr.repo.0.find_commit(head.parent_id(0)?)?;
         let parent_id = parent.id();
 
@@ -271,7 +271,7 @@ impl State {
         match self.next.as_ref() {
             Unrealised::Commit { next, commit } => {
                 let cherry: Commit = mgr.repo.0.find_commit(commit.0)?.into();
-                let head: Commit = mgr.repo.head()?.peel_to_commit()?.into();
+                let head: Commit = mgr.repo.head_commit()?;
 
                 let new_head = if cherry.parent_count() == 1
                     && cherry
@@ -303,7 +303,7 @@ impl State {
     }
 
     pub fn commit(&mut self, mgr: &Manager, msg: impl AsRef<str>) -> Result<MoveResult, Error> {
-        let head: Commit = mgr.repo.0.head()?.peel_to_commit()?.into();
+        let head: Commit = mgr.repo.head_commit()?;
 
         let mut index = mgr.repo.0.index()?;
         let new_tree = index.write_tree_to(&mgr.repo.0)?;
@@ -328,7 +328,7 @@ impl State {
     }
 
     pub fn amend(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
-        let head = mgr.repo.0.head()?.peel_to_commit()?;
+        let head = mgr.repo.head_commit()?;
 
         let mut index = mgr.repo.0.index()?;
         let new_tree = index.write_tree_to(&mgr.repo.0)?;
