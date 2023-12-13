@@ -60,8 +60,8 @@ pub enum MoveResult {
     #[display(fmt = "HEAD has not moved")]
     Stationary,
 
-    #[display(fmt = "{from}..{to}")]
-    Moved { from: Oid, to: Oid },
+    #[display(fmt = "{from}..{to}: {message}")]
+    Moved { from: Oid, to: Oid, message: String },
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -115,6 +115,7 @@ impl State {
         Ok(MoveResult::Moved {
             from: head.id(),
             to: parent_id,
+            message: parent.message().unwrap_or("<no message>").to_string(),
         })
     }
 
@@ -145,6 +146,7 @@ impl State {
                 Ok(MoveResult::Moved {
                     from: head.id(),
                     to: new_head.id(),
+                    message: new_head.message().unwrap_or("<no message>").to_string(),
                 })
             }
 
@@ -170,6 +172,10 @@ impl State {
         Ok(MoveResult::Moved {
             from: head.id(),
             to: new_head_commit.id(),
+            message: new_head_commit
+                .message()
+                .unwrap_or("<no message>")
+                .to_string(),
         })
     }
 
@@ -191,6 +197,10 @@ impl State {
         Ok(MoveResult::Moved {
             from: head.id(),
             to: new_head_id,
+            message: new_head_commit
+                .message()
+                .unwrap_or("<no message>")
+                .to_string(),
         })
     }
 }
