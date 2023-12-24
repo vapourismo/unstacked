@@ -377,17 +377,19 @@ impl State {
         use_index: bool,
     ) -> Result<MoveResult, Error> {
         let tree = mgr.capture_tree(use_index)?;
+        let head: Commit = mgr.repo.head_commit()?;
 
         let msg = match msg {
             Some(msg) => msg,
             None => {
-                let diff = mgr.repo().staged_changes()?;
+                let diff = mgr
+                    .repo()
+                    .diff_tree_to_tree(Some(&head.tree()?), Some(&tree), None)?;
                 mgr.compose_commit_message(None, Some(&diff))?
             }
         };
 
         let sig = mgr.repo.signature()?;
-        let head: Commit = mgr.repo.head_commit()?;
         let new_head_commit = mgr.repo.commit(&sig, &sig, msg, &tree, [&head])?;
 
         mgr.repo
