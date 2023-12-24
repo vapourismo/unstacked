@@ -169,7 +169,7 @@ impl Repo {
     }
 
     pub fn unstaged_changes(&self) -> Result<Diff, git2::Error> {
-        self.0.diff_index_to_workdir(Some(&self.0.index()?), None)
+        self.0.diff_index_to_workdir(None, None)
     }
 
     pub fn index_is_clean(&self) -> bool {

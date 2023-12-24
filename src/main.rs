@@ -3,12 +3,12 @@ mod diffs;
 mod repo;
 mod state;
 
+use crate::state::State;
 use clap::{Parser, Subcommand};
+use diffs::PrettyDiff;
 use repo::Repo;
 use state::Manager;
 use std::error::Error;
-
-use crate::state::State;
 
 #[derive(Parser, Debug)]
 #[command()]
@@ -235,9 +235,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         Cmd::Test {} => {
-            let state = State::read(&mgr)?.validate(&mgr)?;
-            state.write(&mgr)?;
-            eprintln!("{state:#?}");
+            // let state = State::read(&mgr)?.validate(&mgr)?;
+            // state.write(&mgr)?;
+            // eprintln!("{state:#?}");
+
+            let diff = mgr.repo().unstaged_changes()?;
+            let pretty = PrettyDiff::new(&diff)?;
+            eprintln!("{pretty}");
         }
     }
 
