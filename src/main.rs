@@ -1,11 +1,12 @@
 mod commit;
+mod db;
 mod diffs;
 mod repo;
 mod state;
 
 use crate::state::State;
 use clap::{Parser, Subcommand};
-use diffs::PrettyDiff;
+use db::Store;
 use repo::Repo;
 use state::Manager;
 use std::error::Error;
@@ -247,13 +248,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         Cmd::Test {} => {
-            // let state = State::read(&mgr)?.validate(&mgr)?;
-            // state.write(&mgr)?;
-            // eprintln!("{state:#?}");
+            let state = State::read(&mgr)?.validate(&mgr)?;
+            state.write(&mgr)?;
+            eprintln!("{state:#?}");
 
-            let diff = mgr.repo().unstaged_changes()?;
-            let pretty = PrettyDiff::new(&diff)?;
-            eprintln!("{pretty}");
+            let mut kv = Store::open(mgr.repo())?;
+
+            let value: String = kv.get(["foo", "bar"])?;
+            kv.put(
+                ["foo", "bar"],
+                &value.chars().into_iter().rev().collect::<String>(),
+            )?;
+            kv.put(["qux"], &"Stored".to_string())?;
+
+            kv.write()?;
         }
     }
 
