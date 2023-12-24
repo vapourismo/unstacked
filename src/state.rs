@@ -168,7 +168,7 @@ impl Manager {
 
         let tree = if index_tree_id == head.tree_id() && !use_index {
             // No changes were staged in the index, therefore we use the working directory
-            self.repo.working_tree(&head.tree()?)?
+            self.repo.unstaged_tree(&head.tree()?)?
         } else {
             self.repo.find_tree(index_tree_id)?
         };

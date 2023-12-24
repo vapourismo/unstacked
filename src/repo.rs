@@ -178,7 +178,7 @@ impl Repo {
             .unwrap_or(false)
     }
 
-    fn index_tree(&self) -> Result<git2::Tree, Error> {
+    fn staged_tree(&self) -> Result<git2::Tree, Error> {
         let mut index = self.0.index()?;
         index.read(false)?;
 
@@ -188,7 +188,7 @@ impl Repo {
         Ok(index_tree)
     }
 
-    pub fn working_tree(&self, index_tree: &git2::Tree) -> Result<git2::Tree, Error> {
+    pub fn unstaged_tree(&self, index_tree: &git2::Tree) -> Result<git2::Tree, Error> {
         let unstaged_changes = self.0.diff_tree_to_workdir(Some(index_tree), None)?;
         let mut workdir = self.apply_to_tree(index_tree, &unstaged_changes, None)?;
 
@@ -208,7 +208,7 @@ impl Repo {
         index.read(false)?;
 
         // Obtain tree for the currently staged changes
-        let current_index_tree = self.index_tree()?;
+        let current_index_tree = self.staged_tree()?;
 
         // Rebase the changes on top of the destination tree
         let head_tree = self.head_commit()?.tree()?;
@@ -219,7 +219,7 @@ impl Repo {
         let new_index_tree = self.0.find_tree(new_index.write_tree_to(&self.0)?)?;
 
         // Obtain working directory changes relative to the new index tree
-        let workdir_tree = self.working_tree(&new_index_tree)?;
+        let workdir_tree = self.unstaged_tree(&new_index_tree)?;
 
         // Rebase the working directory changes on top of the destination tree
         let mut new_workdir = self.merge_trees(&head_tree, &workdir_tree, &target_tree, None)?;
