@@ -51,15 +51,15 @@ enum Cmd {
     },
 
     ///
-    #[command(alias = "n")]
+    #[command(visible_alias = "n")]
     Next {},
 
     ///
-    #[command(alias = "p")]
+    #[command(visible_alias = "p")]
     Prev {},
 
     /// Produce a new commit with the staged changes
-    #[command(alias = "co")]
+    #[command(visible_alias = "co")]
     Commit {
         /// Commit message
         #[arg(short, long)]
@@ -71,7 +71,7 @@ enum Cmd {
     },
 
     /// Incorporate the staged changes into the active commit
-    #[command(alias = "am")]
+    #[command(visible_alias = "am")]
     Amend {
         /// Only commit staged changes
         #[arg(short = 'i', long = "index")]
@@ -79,7 +79,7 @@ enum Cmd {
     },
 
     /// Edit commit meta data
-    #[command(alias = "ed")]
+    #[command(visible_alias = "ed")]
     Edit {
         #[arg(long = "author-name")]
         author_name: Option<String>,
@@ -98,7 +98,7 @@ enum Cmd {
     },
 
     /// Edit commit message
-    #[command(alias = "em")]
+    #[command(visible_alias = "em")]
     EditMessage {},
 
     ///
@@ -242,7 +242,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut info = mgr.commit_info()?;
             info.message = mgr.compose_commit_message(Some(info.message), None)?;
 
-            mgr.edit(&info)?;
+            let result = mgr.edit(&info)?;
+            eprintln!("{result}");
         }
 
         Cmd::Test {} => {
