@@ -97,6 +97,10 @@ enum Cmd {
         message: Option<String>,
     },
 
+    /// Edit commit message
+    #[command(alias = "em")]
+    EditMessage {},
+
     ///
     Test {},
 }
@@ -232,6 +236,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let result = mgr.edit(&info)?;
             eprintln!("{result}");
+        }
+
+        Cmd::EditMessage {} => {
+            let mut info = mgr.commit_info()?;
+            info.message = mgr.compose_commit_message(Some(info.message), None)?;
+
+            mgr.edit(&info)?;
         }
 
         Cmd::Test {} => {
