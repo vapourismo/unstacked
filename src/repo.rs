@@ -188,7 +188,7 @@ impl Repo {
         Ok(index_tree)
     }
 
-    fn working_tree(&self, index_tree: &git2::Tree) -> Result<git2::Tree, Error> {
+    pub fn working_tree(&self, index_tree: &git2::Tree) -> Result<git2::Tree, Error> {
         let unstaged_changes = self.0.diff_tree_to_workdir(Some(index_tree), None)?;
         let mut workdir = self.apply_to_tree(index_tree, &unstaged_changes, None)?;
 

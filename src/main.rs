@@ -64,11 +64,19 @@ enum Cmd {
         /// Commit message
         #[arg(short, long)]
         msg: Option<String>,
+
+        /// Only commit staged changes
+        #[arg(short = 'i', long = "index")]
+        use_index: bool,
     },
 
     /// Incorporate the staged changes into the active commit
     #[command(alias = "am")]
-    Amend {},
+    Amend {
+        /// Only commit staged changes
+        #[arg(short = 'i', long = "index")]
+        use_index: bool,
+    },
 
     /// Edit commit meta data
     #[command(alias = "ed")]
@@ -168,24 +176,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             eprintln!("{result}");
         }
 
-        Cmd::Commit { msg } => {
+        Cmd::Commit { msg, use_index } => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-
-            let msg = match msg {
-                Some(msg) => msg,
-                None => {
-                    let diff = mgr.repo().staged_changes()?;
-                    mgr.compose_commit_message(None, Some(&diff))?
-                }
-            };
-
-            let result = state.commit(&mgr, msg)?;
+            let result = state.commit(&mgr, msg, use_index)?;
             eprintln!("{result}");
         }
 
-        Cmd::Amend {} => {
+        Cmd::Amend { use_index } => {
             let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let result = state.amend(&mgr)?;
+            let result = state.amend(&mgr, use_index)?;
             eprintln!("{result}");
         }
 

@@ -159,6 +159,22 @@ impl Manager {
 
         Ok(MoveResult::moved(&head, &new_head))
     }
+
+    pub fn capture_tree(&self, use_index: bool) -> Result<git2::Tree, Error> {
+        let head: Commit = self.repo.head_commit()?;
+
+        let mut index = self.repo.index()?;
+        let index_tree_id = index.write_tree_to(&self.repo.0)?;
+
+        let tree = if index_tree_id == head.tree_id() && !use_index {
+            // No changes were staged in the index, therefore we use the working directory
+            self.repo.working_tree(&head.tree()?)?
+        } else {
+            self.repo.find_tree(index_tree_id)?
+        };
+
+        Ok(tree)
+    }
 }
 
 #[derive(Debug, derive_more::Display, derive_more::From, derive_more::Error)]
@@ -354,40 +370,46 @@ impl State {
         }
     }
 
-    pub fn commit(&mut self, mgr: &Manager, msg: impl AsRef<str>) -> Result<MoveResult, Error> {
+    pub fn commit(
+        &mut self,
+        mgr: &Manager,
+        msg: Option<String>,
+        use_index: bool,
+    ) -> Result<MoveResult, Error> {
+        let tree = mgr.capture_tree(use_index)?;
+
+        let msg = match msg {
+            Some(msg) => msg,
+            None => {
+                let diff = mgr.repo().staged_changes()?;
+                mgr.compose_commit_message(None, Some(&diff))?
+            }
+        };
+
+        let sig = mgr.repo.signature()?;
         let head: Commit = mgr.repo.head_commit()?;
-
-        let mut index = mgr.repo.0.index()?;
-        let new_tree = index.write_tree_to(&mgr.repo.0)?;
-        let new_tree = mgr.repo.0.find_tree(new_tree)?;
-
-        let sig = mgr.repo.0.signature()?;
-        let new_head_commit = mgr.repo.commit(&sig, &sig, msg, &new_tree, [&head])?;
+        let new_head_commit = mgr.repo.commit(&sig, &sig, msg, &tree, [&head])?;
 
         mgr.repo
-            .0
-            .reset(new_head_commit.as_object(), ResetType::Soft, None)?;
+            .reset(new_head_commit.as_object(), ResetType::Mixed, None)?;
         self.write(mgr)?;
 
         Ok(MoveResult::moved(&head, &new_head_commit))
     }
 
-    pub fn amend(&mut self, mgr: &Manager) -> Result<MoveResult, Error> {
+    pub fn amend(&mut self, mgr: &Manager, use_index: bool) -> Result<MoveResult, Error> {
+        let new_tree = mgr.capture_tree(use_index)?;
+
         let head = mgr.repo.head_commit()?;
-
-        let mut index = mgr.repo.0.index()?;
-        let new_tree = index.write_tree_to(&mgr.repo.0)?;
-        let new_tree = mgr.repo.0.find_tree(new_tree)?;
-
         let new_head_id = head.amend(None, None, None, None, None, Some(&new_tree))?;
-        let new_head_commit = mgr.repo.0.find_commit(new_head_id)?;
+        let new_head = mgr.repo.0.find_commit(new_head_id)?;
 
         mgr.repo
             .0
-            .reset(new_head_commit.as_object(), ResetType::Soft, None)?;
+            .reset(new_head.as_object(), ResetType::Mixed, None)?;
         self.write(mgr)?;
 
-        Ok(MoveResult::moved(&head, &new_head_commit))
+        Ok(MoveResult::moved(&head, &new_head))
     }
 }
 
