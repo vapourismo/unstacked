@@ -234,7 +234,7 @@ pub enum MoveResult {
 }
 
 impl MoveResult {
-    fn stationary(head: &git2::Commit) -> Self {
+    pub fn stationary(head: &git2::Commit) -> Self {
         let sig = head.author();
         Self::Stationary {
             head: head.id(),
@@ -244,7 +244,7 @@ impl MoveResult {
         }
     }
 
-    fn moved(from: &git2::Commit, to: &git2::Commit) -> Self {
+    pub fn moved(from: &git2::Commit, to: &git2::Commit) -> Self {
         let sig = to.author();
         Self::Moved {
             from: from.id(),

@@ -4,7 +4,7 @@ mod diffs;
 mod repo;
 mod state;
 
-use crate::state::State;
+use crate::state::{MoveResult, State};
 use clap::{Parser, Subcommand};
 use db::Store;
 use diffs::PrettyDiff;
@@ -110,6 +110,10 @@ enum Cmd {
         #[arg(short = 'i', long = "index")]
         use_index: bool,
     },
+
+    /// Display the staged changes
+    #[command(visible_alias = "i")]
+    Info {},
 
     ///
     Test {},
@@ -266,6 +270,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let pretty = PrettyDiff::new(&diff)?;
             println!("{pretty}");
+        }
+
+        Cmd::Info {} => {
+            println!(
+                "{}",
+                MoveResult::stationary(mgr.repo().head_commit()?.as_ref())
+            )
         }
 
         Cmd::Test {} => {
