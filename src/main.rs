@@ -51,11 +51,11 @@ enum Cmd {
         push: Option<String>,
     },
 
-    ///
+    /// Move to next commit
     #[command(visible_alias = "n")]
     Next {},
 
-    ///
+    /// Move to previous commit
     #[command(visible_alias = "p")]
     Prev {},
 
