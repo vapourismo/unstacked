@@ -190,3 +190,43 @@ impl<'a> Store<'a> {
         Ok(self.put_oid(path, blob)?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::repo::Repo;
+
+    use super::Store;
+
+    #[test]
+    fn read_write_simple() {
+        let (repo, _temp_dir) = Repo::temporary();
+        let mut kv = Store::new(&repo).expect("Failed to create KV store");
+
+        kv.put(["foo"], &1337u64).unwrap();
+        assert_eq!(kv.get::<u64>(["foo"]).unwrap(), 1337u64);
+    }
+
+    #[test]
+    fn read_write_nested() {
+        let (repo, _temp_dir) = Repo::temporary();
+        let mut kv = Store::new(&repo).expect("Failed to create KV store");
+
+        kv.put(["foo"], &1337u64).unwrap();
+        kv.put(["foo", "bar"], &"Hello World").unwrap();
+
+        assert!(kv.get::<u64>(["foo"]).is_err());
+        assert_eq!(kv.get::<String>(["foo", "bar"]).unwrap(), "Hello World");
+    }
+
+    #[test]
+    fn read_write_override_nested() {
+        let (repo, _temp_dir) = Repo::temporary();
+        let mut kv = Store::new(&repo).expect("Failed to create KV store");
+
+        kv.put(["foo", "bar"], &"Hello World").unwrap();
+        kv.put(["foo"], &1337u64).unwrap();
+
+        assert!(kv.get::<String>(["foo", "bar"]).is_err());
+        assert_eq!(kv.get::<u64>(["foo"]).unwrap(), 1337u64);
+    }
+}

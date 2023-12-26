@@ -24,6 +24,16 @@ impl Repo {
         Ok(Repo(repo))
     }
 
+    #[cfg(test)]
+    pub fn temporary() -> (Self, temp_dir::TempDir) {
+        let temp_dir = temp_dir::TempDir::new().expect("Could not allocate temporary directory");
+        let repo = git2::Repository::init(temp_dir.path())
+            .expect("Could not initialise temporary repository");
+        let repo = Repo(repo);
+
+        (repo, temp_dir)
+    }
+
     pub fn find_commit<'a>(&'a self, ref_: impl AsRef<str>) -> Result<Commit<'a>, git2::Error> {
         let commit = self
             .0

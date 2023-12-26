@@ -18,3 +18,7 @@ features = ["derive"]
 [dependencies.serde]
 version = "1.0.193"
 features = ["derive"]
+
+[dev-dependencies]
+temp-dir = "0.1.12"
+# proptest = "1.4.0"
