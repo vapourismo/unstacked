@@ -7,6 +7,7 @@ mod state;
 use crate::state::State;
 use clap::{Parser, Subcommand};
 use db::Store;
+use diffs::PrettyDiff;
 use repo::Repo;
 use state::Manager;
 use std::error::Error;
@@ -66,7 +67,7 @@ enum Cmd {
         #[arg(short, long)]
         msg: Option<String>,
 
-        /// Only commit staged changes
+        /// Only commit changes in the index
         #[arg(short = 'i', long = "index")]
         use_index: bool,
     },
@@ -74,7 +75,7 @@ enum Cmd {
     /// Incorporate the staged changes into the active commit
     #[command(visible_alias = "am")]
     Amend {
-        /// Only commit staged changes
+        /// Only amend with changes in the index
         #[arg(short = 'i', long = "index")]
         use_index: bool,
     },
@@ -101,6 +102,14 @@ enum Cmd {
     /// Edit commit message
     #[command(visible_alias = "em")]
     EditMessage {},
+
+    /// Display the staged changes
+    #[command()]
+    Staged {
+        /// Onlys show changes in the index
+        #[arg(short = 'i', long = "index")]
+        use_index: bool,
+    },
 
     ///
     Test {},
@@ -245,6 +254,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let result = mgr.edit(&info)?;
             eprintln!("{result}");
+        }
+
+        Cmd::Staged { use_index } => {
+            let tree = mgr.capture_tree(use_index)?;
+            let diff = mgr.repo().diff_tree_to_tree(
+                Some(&mgr.repo().head_commit()?.tree()?),
+                Some(&tree),
+                None,
+            )?;
+
+            let pretty = PrettyDiff::new(&diff)?;
+            println!("{pretty}");
         }
 
         Cmd::Test {} => {
