@@ -1,12 +1,10 @@
 mod commit;
-mod db;
 mod diffs;
 mod repo;
 mod state;
 
 use crate::state::{MoveResult, State};
 use clap::{Parser, Subcommand};
-use db::Store;
 use diffs::PrettyDiff;
 use repo::Repo;
 use state::Manager;
@@ -283,17 +281,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             let state = State::read(&mgr)?.validate(&mgr)?;
             state.write(&mgr)?;
             eprintln!("{state:#?}");
-
-            let mut kv = Store::open(mgr.repo())?;
-
-            let value: String = kv.get(["foo", "bar"])?;
-            kv.put(
-                ["foo", "bar"],
-                &value.chars().into_iter().rev().collect::<String>(),
-            )?;
-            kv.put(["qux"], &"Stored".to_string())?;
-
-            kv.write()?;
         }
     }
 
