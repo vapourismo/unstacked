@@ -11,6 +11,7 @@ pub enum Error {
     EmptyCommitMessage,
     IndexConflicts,
     WorkingDirConflicts,
+    Conflicts,
 }
 
 #[derive(
@@ -212,29 +213,51 @@ impl Repo {
         Ok(wt_tree)
     }
 
+    fn reapply_tree_changes(
+        &self,
+        base: &git2::Tree,
+        changes: &git2::Tree,
+        target: &git2::Tree,
+    ) -> Result<git2::Tree, Error> {
+        let mut merge_result = self.merge_trees(base, changes, target, None)?;
+
+        if merge_result.has_conflicts() {
+            return Err(Error::Conflicts);
+        }
+
+        let tree = self.0.find_tree(merge_result.write_tree_to(&self.0)?)?;
+        Ok(tree)
+    }
+
     pub fn goto(&self, commit: &Commit) -> Result<(), Error> {
         // Index
         let mut index = self.0.index()?;
         index.read(false)?;
 
+        let head_tree = self.head_commit()?.tree()?;
+        let target_tree = commit.tree()?;
+
         // Obtain tree for the currently staged changes
         let current_index_tree = self.staged_tree()?;
 
         // Rebase the changes on top of the destination tree
-        let head_tree = self.head_commit()?.tree()?;
-        let target_tree = commit.tree()?;
-        let mut new_index =
-            self.merge_trees(&head_tree, &current_index_tree, &target_tree, None)?;
-        assert!(!new_index.has_conflicts());
-        let new_index_tree = self.0.find_tree(new_index.write_tree_to(&self.0)?)?;
+        let new_index_tree = self
+            .reapply_tree_changes(&head_tree, &current_index_tree, &target_tree)
+            .map_err(|err| match err {
+                Error::Conflicts => Error::IndexConflicts,
+                other => other,
+            })?;
 
         // Obtain working directory changes relative to the new index tree
         let workdir_tree = self.unstaged_tree(&new_index_tree)?;
 
         // Rebase the working directory changes on top of the destination tree
-        let mut new_workdir = self.merge_trees(&head_tree, &workdir_tree, &target_tree, None)?;
-        assert!(!new_workdir.has_conflicts());
-        let new_workdir_tree = self.0.find_tree(new_workdir.write_tree_to(&self.0)?)?;
+        let new_workdir_tree = self
+            .reapply_tree_changes(&head_tree, &workdir_tree, &target_tree)
+            .map_err(|err| match err {
+                Error::Conflicts => Error::WorkingDirConflicts,
+                other => other,
+            })?;
 
         // Move HEAD
         self.reset(commit.as_object(), ResetType::Hard, None)?;
