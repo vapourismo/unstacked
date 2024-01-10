@@ -1,11 +1,20 @@
+mod anchor;
 mod commit;
 mod diffs;
+mod git_cache;
+mod git_helper;
+mod model;
+mod path;
 mod repo;
+mod rules;
+mod series;
 mod state;
 
 use crate::state::{MoveResult, State};
 use clap::{Parser, Subcommand};
 use diffs::PrettyDiff;
+use git_cache::CachedRepo;
+use model::Model;
 use repo::Repo;
 use state::Manager;
 use std::error::Error;
@@ -58,6 +67,13 @@ enum Cmd {
     #[command(visible_alias = "p")]
     Prev {},
 
+    ///
+    #[command(visible_alias = "go")]
+    Goto {
+        #[arg()]
+        target: String,
+    },
+
     /// Produce a new commit with the staged changes
     #[command(visible_alias = "co")]
     Commit {
@@ -102,7 +118,7 @@ enum Cmd {
     EditMessage {},
 
     /// Display the staged changes
-    #[command()]
+    #[command(visible_alias = "diff")]
     Staged {
         /// Onlys show changes in the index
         #[arg(short = 'i', long = "index")]
@@ -112,6 +128,35 @@ enum Cmd {
     /// Display the staged changes
     #[command(visible_alias = "i")]
     Info {},
+
+    ///
+    #[command()]
+    NewSeries {
+        #[arg()]
+        name: String,
+
+        #[arg(short, long)]
+        parent: Option<String>,
+    },
+
+    ///
+    #[command()]
+    NewAnchor {
+        #[arg()]
+        name: String,
+
+        #[arg(short = 'v', long)]
+        initial_value: Option<String>,
+    },
+
+    ///
+    Build {
+        #[arg()]
+        rules: Vec<String>,
+    },
+
+    ///
+    BuildAll {},
 
     ///
     Test {},
@@ -141,7 +186,7 @@ fn chain(
     }
 
     for new_commit in add_commits {
-        commit = commit.cherry_pick(&repo, &new_commit, sign)?;
+        commit = commit.cherry_pick(repo, &new_commit, sign)?;
     }
 
     if let Some(ref_) = update_ref {
@@ -158,6 +203,8 @@ fn chain(
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
+
     let args = Args::parse();
     let repo = Repo::discover(args.repo.as_str())?;
     let mgr = Manager::new(repo);
@@ -181,27 +228,58 @@ fn main() -> Result<(), Box<dyn Error>> {
         )?,
 
         Cmd::Next {} => {
-            let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let result = state.next(&mgr)?;
-            eprintln!("{result}");
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            model.goto_next(&mut repo)?;
+
+            println!("{:?}", model.focus());
+            model.save(repo.repo())?;
         }
 
         Cmd::Prev {} => {
-            let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let result = state.prev(&mgr)?;
-            eprintln!("{result}");
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            model.goto_parent(&mut repo)?;
+
+            println!("{:?}", model.focus());
+            model.save(repo.repo())?;
+        }
+
+        Cmd::Goto { target } => {
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            model.goto_rule(&mut repo, &target)?;
+
+            println!("{:?}", model.focus());
+            model.save(repo.repo())?;
         }
 
         Cmd::Commit { msg, use_index } => {
-            let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let result = state.commit(&mgr, msg, use_index)?;
-            eprintln!("{result}");
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            let msg = {
+                let diff = model.staged_diff(repo.repo(), use_index)?;
+                git_helper::compose_commit_message(repo.repo(), msg, diff.as_ref())?
+            };
+
+            model.commit_onto_focus(&mut repo, msg, use_index, false)?;
+
+            println!("{:?}", model.focus());
+            model.save(repo.repo())?;
         }
 
         Cmd::Amend { use_index } => {
-            let mut state = State::read(&mgr)?.validate(&mgr)?;
-            let result = state.amend(&mgr, use_index)?;
-            eprintln!("{result}");
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            model.amend_focus(&mut repo, use_index)?;
+
+            println!("{:?}", model.focus());
+            model.save(repo.repo())?;
         }
 
         Cmd::Edit {
@@ -259,15 +337,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         Cmd::Staged { use_index } => {
-            let tree = mgr.capture_tree(use_index)?;
-            let diff = mgr.repo().diff_tree_to_tree(
-                Some(&mgr.repo().head_commit()?.tree()?),
-                Some(&tree),
-                None,
-            )?;
+            let repo = CachedRepo::discover(args.repo)?;
+            let model = Model::load(repo.repo())?;
 
-            let pretty = PrettyDiff::new(&diff)?;
-            println!("{pretty}");
+            if let Some(diff) = model.staged_diff(repo.repo(), use_index)? {
+                let pretty = PrettyDiff::new(&diff)?;
+                println!("{pretty}");
+            }
+
+            // XXX: To make the borrow-checker happy
+            let _ = repo;
         }
 
         Cmd::Info {} => {
@@ -275,6 +354,69 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "{}",
                 MoveResult::stationary(mgr.repo().head_commit()?.as_ref())
             )
+        }
+
+        Cmd::NewSeries { name, parent } => {
+            let repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            let rule = match parent {
+                Some(name) => name,
+                None => match model.focus_rule() {
+                    Some(rule) => rule,
+                    None => Err(git2::Error::new(git2::ErrorCode::Invalid, git2::ErrorClass::Invalid, "Model has no focus to act as parent, you need to specify a parent explicitly"))?,
+                },
+            };
+
+            model.new_series(name.as_str(), rule);
+            model.save(repo.repo())?;
+        }
+
+        Cmd::NewAnchor {
+            name,
+            initial_value: parent,
+        } => {
+            let repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            let id = match parent {
+                Some(rev) => repo
+                    .repo()
+                    .revparse(rev.as_str())?
+                    .from()
+                    .ok_or_else(|| {
+                        git2::Error::new(
+                            git2::ErrorCode::Invalid,
+                            git2::ErrorClass::Invalid,
+                            format!("Revision {rev} does not resolve to a usable object"),
+                        )
+                    })?
+                    .id(),
+                None => repo.repo().head()?.peel_to_commit()?.id(),
+            };
+
+            model.new_anchor(name.as_str(), id);
+            model.save(repo.repo())?;
+        }
+
+        Cmd::Build { rules } => {
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            for rule in rules {
+                let id = model.build(&mut repo, rule)?;
+                println!("{}", id);
+            }
+        }
+
+        Cmd::BuildAll {} => {
+            let mut repo = CachedRepo::discover(args.repo)?;
+            let mut model = Model::load(repo.repo())?;
+
+            let builds = model.build_all(&mut repo)?;
+            for (name, id) in builds {
+                println!("{name} => {id}");
+            }
         }
 
         Cmd::Test {} => {
