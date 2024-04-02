@@ -28,12 +28,16 @@
           pkgs.pkg-config
         ];
 
-        buildInputs = with pkgs; [
-          openssl.dev
-          libgpg-error
-          gpgme.dev
-          libgit2
-        ];
+        buildInputs = with pkgs;
+          [
+            openssl.dev
+            libgpg-error
+            gpgme.dev
+            libgit2
+          ]
+          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            frameworks.SystemConfiguration
+          ];
       };
 
       devShell = pkgs.mkShell {
