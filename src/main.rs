@@ -141,7 +141,7 @@ fn chain(
     }
 
     for new_commit in add_commits {
-        commit = commit.cherry_pick(&repo, &new_commit, sign)?;
+        commit = commit.cherry_pick(repo, &new_commit, sign)?;
     }
 
     if let Some(ref_) = update_ref {

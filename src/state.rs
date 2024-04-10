@@ -46,7 +46,7 @@ impl Manager {
     ) -> Result<String, Error> {
         let editor = env::var("EDITOR").expect("Need $EDITOR set when omitting commit message");
 
-        fs::write(msg_file, &body)?;
+        fs::write(msg_file, body)?;
 
         let exit = process::Command::new(editor)
             .arg(msg_file)
@@ -55,9 +55,9 @@ impl Manager {
 
         assert!(exit.success());
 
-        let msg = fs::read(&msg_file)?;
+        let msg = fs::read(msg_file)?;
         let msg = String::from_utf8(msg)?;
-        fs::remove_file(&msg_file)?;
+        fs::remove_file(msg_file)?;
 
         Ok(msg)
     }
@@ -148,7 +148,7 @@ impl Manager {
             Some(&author),
             Some(&committer),
             None,
-            Some(&info.message.as_str()),
+            Some(info.message.as_str()),
             Some(&head.tree()?),
         )?;
         let new_head = self.repo.0.find_commit(new_head)?;

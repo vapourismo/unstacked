@@ -35,7 +35,7 @@ impl Repo {
         (repo, temp_dir)
     }
 
-    pub fn find_commit<'a>(&'a self, ref_: impl AsRef<str>) -> Result<Commit<'a>, git2::Error> {
+    pub fn find_commit(&self, ref_: impl AsRef<str>) -> Result<Commit<'_>, git2::Error> {
         let commit = self
             .0
             .revparse(ref_.as_ref())?
@@ -70,9 +70,7 @@ impl Repo {
             tree,
             parents.as_slice(),
         )?;
-        let commit_buffer_str = commit_buffer
-            .as_str()
-            .ok_or_else(|| Error::EmptyCommitMessage)?;
+        let commit_buffer_str = commit_buffer.as_str().ok_or(Error::EmptyCommitMessage)?;
 
         let signature = {
             let mut ctx = gpgme::Context::from_protocol(gpgme::Protocol::OpenPgp)?;
