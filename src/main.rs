@@ -48,6 +48,10 @@ enum Cmd {
         /// Push updated reference to this remote
         #[arg(short, long)]
         push: Option<String>,
+
+        /// Forcefully resolve conflicts that may arise during cherry-picking
+        #[arg(short, long)]
+        forceful: bool,
     },
 
     /// Move to next commit
@@ -117,6 +121,7 @@ enum Cmd {
     Test {},
 }
 
+#[allow(clippy::too_many_arguments)]
 fn chain(
     repo: &Repo,
     base_ref: String,
@@ -125,6 +130,7 @@ fn chain(
     sign: bool,
     update_ref: Option<String>,
     push: Option<String>,
+    forceful: bool,
 ) -> Result<(), Box<dyn Error>> {
     let mut commit = repo.find_commit(base_ref)?;
     let num_refs = added_refs.len();
@@ -141,7 +147,7 @@ fn chain(
     }
 
     for new_commit in add_commits {
-        commit = commit.cherry_pick(repo, &new_commit, sign)?;
+        commit = commit.cherry_pick(repo, &new_commit, sign, forceful)?;
     }
 
     if let Some(ref_) = update_ref {
@@ -170,6 +176,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             sign,
             update_ref,
             push,
+            forceful,
         } => chain(
             mgr.repo(),
             base_ref,
@@ -178,6 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             sign,
             update_ref,
             push,
+            forceful,
         )?,
 
         Cmd::Next {} => {

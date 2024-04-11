@@ -355,7 +355,7 @@ impl State {
                 {
                     cherry
                 } else {
-                    head.cherry_pick(mgr.repo(), &cherry, false)?
+                    head.cherry_pick(mgr.repo(), &cherry, false, false)?
                 };
 
                 self.next = next.clone();
